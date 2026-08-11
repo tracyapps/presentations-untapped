@@ -15,9 +15,11 @@ See PLAN.md for the full technical plan, pitfalls, and timeline.
 - [x] Block-specific property editors, rich-text toolbar, and drag-and-drop
 - [x] Save reusable block snapshots from the editor chrome
 - [x] Contrast-tested slide/block surfaces, fixed SVG themes, and LU image masks
-- [ ] Library palette insertion and management screen
+- [x] Searchable library palette insertion plus rename/delete management screen
+- [x] Reusable media library UI with drag/drop and drive browsing
 - [ ] Block templates informed by real marketing decks (next milestone)
-- [ ] Vercel Blob token and voiceover upload
+- [ ] Connect Vercel Blob and pull `BLOB_READ_WRITE_TOKEN` locally
+- [ ] Voiceover upload
 - [x] Initial Vercel deployment
 - [ ] Public-deck DNS
 
@@ -41,3 +43,16 @@ npm run db:push
 # 4. Run it
 npm run dev
 ```
+
+## Media storage setup
+
+Image uploads use a public Vercel Blob store because published decks need direct,
+cacheable image URLs. In the Vercel project, create or connect a Blob store and
+make it available to the Development, Preview, and Production environments.
+Vercel injects `BLOB_READ_WRITE_TOKEN` for deployments. Then refresh local env
+settings with `vercel env pull .env.local --yes`, or copy the store's read-write
+token into `BLOB_READ_WRITE_TOKEN` in `.env.local`.
+
+Until the token is present, the media library stays visible but upload controls
+are intentionally disabled. Accepted images are JPG, PNG, WebP, and GIF up to
+15 MB. SVG uploads are excluded because uploaded SVGs can contain active content.

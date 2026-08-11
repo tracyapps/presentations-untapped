@@ -1,0 +1,10 @@
+{
+  "prefix": "media/",
+  "maximumSizeInBytes": 15728640,
+  "allowedContentTypes": [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif"
+  ]
+}

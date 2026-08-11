@@ -9,16 +9,29 @@ import {
   saveSlideAction, type SaveSlideResult,
 } from "@/app/decks/[id]/edit/actions";
 import SlideCanvas from "@/components/SlideCanvas";
+import MediaLibraryPanel from "@/components/MediaLibraryPanel";
 import type { EditorDeck, EditorSlide } from "@/lib/data/editor";
+import type { LibraryBlockItem } from "@/lib/data/library";
+import type { MediaAsset, MediaLibraryData } from "@/lib/data/media";
 import { LAYOUTS, migrateToLayout } from "@/lib/slides/layouts";
-import { appendContent, deleteNode, duplicateNode, moveNode, moveNodeTo } from "@/lib/slides/editor";
+import { appendContent, cloneNode, createContentNode, deleteNode, duplicateNode, moveNode, moveNodeTo } from "@/lib/slides/editor";
 import { IMAGE_FRAMES, PATTERNS, SURFACES, type ImageFrameKey, type SlidePatternChoice, type SurfaceChoice } from "@/lib/slides/styles";
 import type { ContentNode, ContentType, Node, RichText } from "@/lib/slides/types";
 import { isLayout } from "@/lib/slides/types";
 
 type Tab = "design" | "outline" | "voiceover";
 type SaveState = "saved" | "dirty" | "saving" | "conflict" | "error";
+type PaletteSection = "layouts" | "design" | "content" | "library" | "media";
 type TextNode = Extract<ContentNode, { type: "title" | "tagline" | "blockquote" | "callout" | "paragraph" }>;
+
+const PALETTE_STATE_KEY = "lu-editor-palette-sections-v1";
+const DEFAULT_PALETTE_STATE: Record<PaletteSection, boolean> = {
+  layouts: true,
+  design: true,
+  content: true,
+  library: true,
+  media: true,
+};
 
 const CONTENT_PALETTE: Array<{ type: ContentType; label: string }> = [
   { type: "title", label: "Title" }, { type: "tagline", label: "Tagline" },
@@ -53,10 +66,14 @@ function plainText(value: RichText): string {
   return value.map((part) => part.text).join("");
 }
 
-export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; initialSlide: EditorSlide }) {
+export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLibrary }: { deck: EditorDeck; initialSlide: EditorSlide; libraryItems: LibraryBlockItem[]; mediaLibrary: MediaLibraryData }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("design");
   const [previewTheme, setPreviewTheme] = useState<"light" | "dark">(deck.themeDefault);
+  const [paletteState, setPaletteState] = useState(DEFAULT_PALETTE_STATE);
+  const [availableLibraryItems, setAvailableLibraryItems] = useState(libraryItems);
+  const [mediaItems, setMediaItems] = useState(mediaLibrary.items);
+  const [libraryQuery, setLibraryQuery] = useState("");
   const [doc, setDoc] = useState(initialSlide.blocks);
   const [savedDoc, setSavedDoc] = useState(initialSlide.blocks);
   const [layoutKey, setLayoutKey] = useState(initialSlide.layoutKey);
@@ -79,6 +96,27 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
 
   useEffect(() => { docRef.current = doc; }, [doc]);
   useEffect(() => { layoutRef.current = layoutKey; }, [layoutKey]);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PALETTE_STATE_KEY) ?? "null") as Partial<Record<PaletteSection, boolean>> | null;
+      if (saved) setPaletteState((current) => ({ ...current, ...saved }));
+    } catch {
+      localStorage.removeItem(PALETTE_STATE_KEY);
+    }
+  }, []);
+
+  const visibleLibraryItems = useMemo(() => {
+    const query = libraryQuery.trim().toLowerCase();
+    return availableLibraryItems.filter((item) => !query || `${item.name} ${item.node.type}`.toLowerCase().includes(query));
+  }, [availableLibraryItems, libraryQuery]);
+
+  function togglePaletteSection(section: PaletteSection) {
+    setPaletteState((current) => {
+      const next = { ...current, [section]: !current[section] };
+      localStorage.setItem(PALETTE_STATE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
 
   async function save(snapshot = docRef.current, snapshotLayout = layoutRef.current): Promise<SaveSlideResult | null> {
     if (savingRef.current) return null;
@@ -241,12 +279,29 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
           setLibraryNotice(result.message);
           return;
         }
+        setAvailableLibraryItems((current) => [result.item, ...current.filter((item) => item.id !== result.item.id)]);
         setLibraryTarget(null);
-        setLibraryNotice(`“${result.name}” was saved to the library.`);
+        setLibraryNotice(`“${result.item.name}” was saved to the library.`);
       } catch {
         setLibraryNotice("The development server briefly disconnected. Try saving the block again.");
       }
     });
+  }
+
+  function insertLibraryItem(item: LibraryBlockItem) {
+    markDoc({ ...docRef.current, blocks: [...docRef.current.blocks, cloneNode(item.node)] });
+    setLibraryNotice(`Added a copy of “${item.name}” to slide ${initialSlide.position}.`);
+  }
+
+  function registerMedia(asset: MediaAsset) {
+    setMediaItems((current) => [asset, ...current.filter((item) => item.url !== asset.url)]);
+  }
+
+  function addImageFromMedia(asset: MediaAsset) {
+    const image = createContentNode("image") as Extract<ContentNode, { type: "image" }>;
+    const alt = asset.name.replace(/\.[^.]+$/, "").replaceAll("-", " ");
+    markDoc({ ...docRef.current, blocks: [...docRef.current.blocks, { ...image, props: { ...image.props, src: asset.url, alt } }] });
+    setLibraryNotice(`Added ${asset.name} to slide ${initialSlide.position}.`);
   }
 
   function addSlide() {
@@ -369,8 +424,7 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
             <div className="palette-note"><strong>Voiceover tools</strong><p>Upload and caption controls arrive in the next milestone.</p></div>
           ) : (
             <>
-              <section>
-                <h2>Layouts</h2>
+              <PaletteSectionPanel id="layouts" label="Layouts" open={paletteState.layouts} onToggle={() => togglePaletteSection("layouts")}>
                 <div className="layout-palette">
                   {LAYOUTS.map((layout) => (
                     <button type="button" className={layout.key === layoutKey ? "is-selected" : ""} onClick={() => changeLayout(layout.key)} key={layout.key}>
@@ -379,9 +433,8 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
                     </button>
                   ))}
                 </div>
-              </section>
-              <section>
-                <h2>Slide design</h2>
+              </PaletteSectionPanel>
+              {tab === "design" && <PaletteSectionPanel id="design" label="Slide design" open={paletteState.design} onToggle={() => togglePaletteSection("design")}>
                 <p className="palette-help">Surface colors respond to the deck mode. SVG art uses a fixed, contrast-safe foreground.</p>
                 <div className="preview-theme-toggle" role="group" aria-label="Preview color mode">
                   <span>Preview</span>
@@ -390,13 +443,27 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
                 </div>
                 <SurfaceSwatches value={doc.style?.surface ?? "inherit"} theme={previewTheme} includeInherit onChange={(surface) => updateSlideDesign({ surface })} />
                 <PatternSwatches value={doc.style?.pattern ?? "none"} onChange={(pattern) => updateSlideDesign({ pattern })} />
-              </section>
-              <section>
-                <h2>Content</h2>
+              </PaletteSectionPanel>}
+              <PaletteSectionPanel id="content" label="Content" open={paletteState.content} onToggle={() => togglePaletteSection("content")}>
                 <div className="content-palette">
                   {CONTENT_PALETTE.map((item) => <button type="button" onClick={() => addBlock(item.type)} key={item.type}>{item.label}</button>)}
                 </div>
-              </section>
+              </PaletteSectionPanel>
+              <PaletteSectionPanel id="library" label="Library" count={availableLibraryItems.length} open={paletteState.library} onToggle={() => togglePaletteSection("library")}>
+                <div className="library-palette-heading">
+                  <p className="palette-help">Insert a fresh copy of a saved block.</p>
+                  <Link href="/library" onClick={confirmNavigate}>Manage</Link>
+                </div>
+                <label className="library-search"><span className="sr-only">Search library blocks</span><input type="search" value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="Search saved blocks" /></label>
+                <div className="library-palette" aria-live="polite">
+                  {visibleLibraryItems.map((item) => <button type="button" onClick={() => insertLibraryItem(item)} key={item.id}><strong>{item.name}</strong><span>{item.node.type.replace(/([A-Z])/g, " $1")}</span></button>)}
+                  {!visibleLibraryItems.length && <p className="library-palette-empty">{availableLibraryItems.length ? "No matching blocks." : "Save a block with the star button to build your library."}</p>}
+                </div>
+              </PaletteSectionPanel>
+              <PaletteSectionPanel id="media" label="Media" count={mediaItems.length} open={paletteState.media} onToggle={() => togglePaletteSection("media")}>
+                <p className="palette-help">Upload once, then reuse the image in any deck.</p>
+                <MediaLibraryPanel items={mediaItems} configured={mediaLibrary.configured} loadError={mediaLibrary.error} onUploaded={registerMedia} onSelect={addImageFromMedia} />
+              </PaletteSectionPanel>
             </>
           )}
         </aside>
@@ -410,7 +477,7 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
             onDrop: dropBlock,
             onSaveToLibrary: openLibraryDialog,
           }} /></div>}
-          {tab === "outline" && <div className="outline-workspace"><OutlineTree nodes={doc.blocks} onText={updateText} onUpdate={updateNode} onSurface={updateNodeSurface} onMove={dropBlock} /></div>}
+          {tab === "outline" && <div className="outline-workspace"><OutlineTree nodes={doc.blocks} media={{ items: mediaItems, configured: mediaLibrary.configured, error: mediaLibrary.error, onUploaded: registerMedia }} onText={updateText} onUpdate={updateNode} onSurface={updateNodeSurface} onMove={dropBlock} /></div>}
           {tab === "voiceover" && <div className="voiceover-empty"><p className="eyebrow">Voiceover</p><h2>Add narration after the editing foundation is complete</h2><p>The player, audio upload, and caption cue editor are the following roadmap milestone.</p></div>}
         </section>
       </div>
@@ -442,6 +509,14 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
       )}
     </main>
   );
+}
+
+function PaletteSectionPanel({ id, label, count, open, onToggle, children }: { id: PaletteSection; label: string; count?: number; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+  const contentId = `palette-section-${id}`;
+  return <section className={`palette-section${open ? " is-open" : " is-collapsed"}`}>
+    <h2><button type="button" aria-expanded={open} aria-controls={contentId} onClick={onToggle}><span>{label}{count !== undefined && <small>{count}</small>}</span><i aria-hidden="true">⌄</i></button></h2>
+    {open && <div className="palette-section-content" id={contentId}>{children}</div>}
+  </section>;
 }
 
 function MiniNode({ node }: { node: Node }) {
@@ -481,19 +556,21 @@ function ImageFramePicker({ value, onChange }: { value?: ImageFrameKey; onChange
   </div></fieldset>;
 }
 
-function OutlineTree({ nodes, onText, onUpdate, onSurface, onMove }: { nodes: Node[]; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSurface: (id: string, surface: SurfaceChoice) => void; onMove: (sourceId: string, target: BlockDropTarget) => void }) {
+type OutlineMedia = { items: MediaAsset[]; configured: boolean; error?: string; onUploaded: (asset: MediaAsset) => void };
+
+function OutlineTree({ nodes, media, onText, onUpdate, onSurface, onMove }: { nodes: Node[]; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSurface: (id: string, surface: SurfaceChoice) => void; onMove: (sourceId: string, target: BlockDropTarget) => void }) {
   const dnd = useBlockDnd(onMove);
-  return <OutlineNodes nodes={nodes} parentId={null} onText={onText} onUpdate={onUpdate} onSurface={onSurface} dnd={dnd} />;
+  return <OutlineNodes nodes={nodes} parentId={null} media={media} onText={onText} onUpdate={onUpdate} onSurface={onSurface} dnd={dnd} />;
 }
 
-function OutlineNodes({ nodes, parentId, onText, onUpdate, onSurface, dnd }: { nodes: Node[]; parentId: string | null; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSurface: (id: string, surface: SurfaceChoice) => void; dnd: BlockDndController }) {
+function OutlineNodes({ nodes, parentId, media, onText, onUpdate, onSurface, dnd }: { nodes: Node[]; parentId: string | null; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSurface: (id: string, surface: SurfaceChoice) => void; dnd: BlockDndController }) {
   if (!nodes.length) return <div className="outline-nodes is-empty-drop-container"><BlockDropZone axis="vertical" controller={dnd} target={{ parentId, index: 0 }} /></div>;
   return <div className="outline-nodes">{nodes.map((node, index) => {
     const before = { parentId, index };
     const after = { parentId, index: index + 1 };
     return <div className={`outline-node-slot${isActiveTarget(dnd, before) ? " is-target-before" : ""}${index === nodes.length - 1 && isActiveTarget(dnd, after) ? " is-target-after" : ""}`} key={node.id}>
       <BlockDropZone axis="vertical" controller={dnd} target={before} />
-      <OutlineNode node={node} onText={onText} onUpdate={onUpdate} onSurface={onSurface} dnd={dnd} />
+      <OutlineNode node={node} media={media} onText={onText} onUpdate={onUpdate} onSurface={onSurface} dnd={dnd} />
       {index === nodes.length - 1 && <BlockDropZone axis="vertical" controller={dnd} target={after} />}
     </div>;
   })}</div>;
@@ -511,9 +588,9 @@ function OutlineDragHeader({ node, dnd }: { node: Node; dnd: BlockDndController 
   </header>;
 }
 
-function OutlineNode({ node, onText, onUpdate, onSurface, dnd }: { node: Node; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSurface: (id: string, surface: SurfaceChoice) => void; dnd: BlockDndController }) {
+function OutlineNode({ node, media, onText, onUpdate, onSurface, dnd }: { node: Node; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSurface: (id: string, surface: SurfaceChoice) => void; dnd: BlockDndController }) {
   if (isLayout(node)) {
-    return <section className={`outline-layout${dnd.draggingId === node.id ? " is-dragging" : ""}`} aria-label={`${node.type} layout`}><OutlineDragHeader node={node} dnd={dnd} /><NodeSurfaceControl node={node} onSurface={onSurface} /><OutlineNodes nodes={node.children} parentId={node.id} onText={onText} onUpdate={onUpdate} onSurface={onSurface} dnd={dnd} /></section>;
+    return <section className={`outline-layout${dnd.draggingId === node.id ? " is-dragging" : ""}`} aria-label={`${node.type} layout`}><OutlineDragHeader node={node} dnd={dnd} /><NodeSurfaceControl node={node} onSurface={onSurface} /><OutlineNodes nodes={node.children} parentId={node.id} media={media} onText={onText} onUpdate={onUpdate} onSurface={onSurface} dnd={dnd} /></section>;
   }
   return (
     <section className={`outline-block${dnd.draggingId === node.id ? " is-dragging" : ""}`}>
@@ -523,7 +600,8 @@ function OutlineNode({ node, onText, onUpdate, onSurface, dnd }: { node: Node; o
       {node.type === "blockquote" && <Field label="Attribution" value={node.props.attribution ?? ""} onChange={(value) => onUpdate(node.id, (current) => current.type === "blockquote" ? { ...current, props: { ...current.props, attribution: value } } : current)} />}
       {node.type === "callout" && <label>Style<select value={node.props.variant} onChange={(event) => onUpdate(node.id, (current) => current.type === "callout" ? { ...current, props: { ...current.props, variant: event.target.value as "accent" | "teal" | "blue" } } : current)}><option value="accent">Accent</option><option value="teal">Teal</option><option value="blue">Blue</option></select></label>}
       {node.type === "image" && <>
-        <Field label="Image URL" value={node.props.src} onChange={(value) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, src: value } } : current)} />
+        <MediaLibraryPanel items={media.items} configured={media.configured} loadError={media.error} selectedUrl={node.props.src} onUploaded={media.onUploaded} onSelect={(asset) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, src: asset.url, alt: current.props.alt || asset.name.replace(/\.[^.]+$/, "").replaceAll("-", " ") } } : current)} />
+        <Field label="Image URL" hint="Or paste a hosted image URL" value={node.props.src} onChange={(value) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, src: value } } : current)} />
         <Field label="Alt text" value={node.props.alt} disabled={node.props.decorative} onChange={(value) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, alt: value } } : current)} />
         <Check label="Decorative image" checked={node.props.decorative ?? false} onChange={(checked) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, decorative: checked } } : current)} />
         <ImageFramePicker value={node.props.frame} onChange={(frame) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, frame } } : current)} />

@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { decks, libraryItems, slides } from "@/lib/db/schema";
 import { layoutByKey } from "@/lib/slides/layouts";
 import { cloneDoc } from "@/lib/slides/editor";
+import type { LibraryBlockItem } from "@/lib/data/library";
 import type { Node, SlideDoc } from "@/lib/slides/types";
 
 export type SaveSlideResult =
@@ -15,7 +16,7 @@ export type SaveSlideResult =
   | { status: "error"; message: string };
 
 export type SaveLibraryItemResult =
-  | { status: "saved"; name: string }
+  | { status: "saved"; item: LibraryBlockItem }
   | { status: "error"; message: string };
 
 const contentTypes = new Set([
@@ -60,14 +61,23 @@ export async function saveBlockToLibraryAction(input: {
   }
 
   try {
-    await db.insert(libraryItems).values({
+    const [saved] = await db.insert(libraryItems).values({
       kind: "block",
       name,
       payload: input.node,
       createdBy: userId,
-    });
+    }).returning({ id: libraryItems.id, createdAt: libraryItems.createdAt, updatedAt: libraryItems.updatedAt });
     revalidatePath("/library");
-    return { status: "saved", name };
+    return {
+      status: "saved",
+      item: {
+        id: saved.id,
+        name,
+        node: input.node,
+        createdAt: saved.createdAt.toISOString(),
+        updatedAt: saved.updatedAt.toISOString(),
+      },
+    };
   } catch (error) {
     console.error("Failed to save library block", error);
     return { status: "error", message: "The block could not be saved to the library. Try again." };

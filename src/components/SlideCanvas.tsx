@@ -73,6 +73,7 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
   return (
     <section
       className={`editable-slide-block editable-slide-block-${node.kind}${dnd?.draggingId === node.id ? " is-dragging" : ""}`}
+      data-node-id={node.id}
       tabIndex={0}
       aria-label={`${node.type} block`}
     >
