@@ -28,6 +28,7 @@ function nodeSummary(node: Node): string {
     case "statCard": return `${node.props.value} · ${node.props.label}`;
     case "image": return node.props.alt || "Image block";
     case "list": return node.props.items.map(text).join(" · ");
+    case "process": return node.props.steps.map((step) => step.title).join(" → ");
     case "table": return node.props.header.join(" · ");
     case "pricingTable": return node.props.columns.map((column) => column.name).join(" · ");
     case "chart": return `${node.props.chartType} chart · ${node.props.labels.join(", ")}`;

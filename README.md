@@ -25,9 +25,11 @@ _Last reconciled with the codebase: August 11, 2026._
 - [x] Collapsible palettes with remembered state
 - [x] Editor-only 16:9 boundary with reachable overflow; natural-height Outline view
 - [x] Content-only Outline view with design controls kept in Design
-- [ ] Block templates informed by real marketing decks (next milestone)
+- [x] Initial collateral-backed block inventory, process block, and timeline/process templates
+- [ ] Reconcile and finish the block/template inventory against representative pitch decks (next milestone)
 - [x] Connect Vercel Blob and pull its read/write token locally
-- [ ] Voiceover upload
+- [x] Per-slide voiceover upload, shared player, and manual caption cues
+- [x] Internal present mode with keyboard navigation, overview, themes, and full screen
 - [x] Initial Vercel deployment
 - [ ] Public-deck DNS
 
@@ -78,11 +80,15 @@ store.
 Until the token is present, the media library stays visible but upload controls
 are intentionally disabled. Accepted images are JPG, PNG, WebP, and GIF up to
 15 MB. SVG uploads are excluded because uploaded SVGs can contain active content.
+The same store accepts per-slide MP3, M4A, and WAV voiceovers under a separate
+`audio/` prefix with a 25 MB maximum. Replacing or deleting a voiceover removes
+the previous Blob; caption cues remain in Neon with the voiceover record.
 
 ## Verification commands
 
 ```bash
 npx tsc --noEmit
+npm run test:audio
 npm run test:styles
 npm run test:media
 git diff --check

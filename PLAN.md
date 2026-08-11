@@ -14,13 +14,15 @@ drag/drop, reusable block snapshots, a Vercel Blob media library, contrast-safe
 slide styles, SVG backgrounds, and LU image masks. Design mode shows a labeled
 16:9 boundary while keeping overflow reachable for editing. Outline is a
 natural-height content/structure editor and intentionally contains no design
-controls. Voiceover, present mode, review/publishing, and public routes remain
-planned.
+controls. Per-slide voiceover upload, the shared accessible player, manual
+caption cues, and internal present mode are implemented. Review/publishing and
+public routes remain planned.
 
-**Next development milestone:** turn the collected real marketing decks into a
-prioritized block/template inventory, then implement the missing high-value
-content blocks on top of the current editor foundation. See `HANDOFF.md` for the
-exact pickup checklist and uncommitted work summary.
+**Next development milestone:** reconcile the provisional collateral-backed
+inventory in `BLOCK-INVENTORY.md` against collected real marketing decks, then
+continue implementing missing high-value content blocks. The first inventory
+slice—a direction-aware process block with timeline/process templates—is now in
+place. See `HANDOFF.md` for the exact pickup checklist.
 
 ---
 
@@ -121,7 +123,7 @@ Layouts are named skeleton templates (`title-paragraph`, `two-column`, `title-on
 /decks                    → dashboard: grid + table views, search, sort (created/modified), grouped by client
 /decks/new                → name + pick/create client (+ optional event)
 /decks/[id]/edit/[slide]  → editor: Design | Outline | Voiceover tabs
-/decks/[id]/present       → internal present mode (planned; works for draft decks too)
+/decks/[id]/present       → internal present mode (implemented; works for draft decks too)
 /clients                  → client list + settings panel (planned)
 /library                  → manage saved blocks (slide library items planned)
 /p/[clientSlug]/[deckSlug]→ public approved deck (planned) — served at decks.loyaltyuntapped.com/[clientSlug]/[deckSlug]
@@ -146,9 +148,9 @@ Every block gets **always-visible chrome** (req #14): a thin outline + mini head
 
 **Outline view (req #19, implemented foundation):** same structural/content/library/media palette; Slide Design is hidden. The right side renders the same tree as natural-height nested labeled boxes with plain content fields, media/accessibility details, drag/drop, and column swapping. All surfaces, image frames, callout color variants, and rich-text formatting controls are intentionally excluded so Outline stays focused on content and structure. Existing design data is preserved when content changes, so toggling remains lossless.
 
-**Voiceover view (req #21):** left = upload zone (mp3/m4a/wav, soft 25MB cap) + clip info + delete/replace; right = player preview exactly as it will appear on the published slide, plus the **caption cue editor**: table of rows (start / end / text), "＋ cue at playhead" button, inline validation (overlaps/ordering). This *is* the manual transcription editor (auto-transcription later feeds the same rows).
+**Voiceover view (req #21, implemented):** left = upload zone (mp3/m4a/wav, 25MB cap) + clip info + delete/replace; right = the reusable player preview plus the **caption cue editor**: rows of start / end / text fields, a "＋ cue at playhead" button, and client/server validation for empty text, overlaps, ordering, and clip bounds. This *is* the manual transcription editor (auto-transcription later feeds the same rows).
 
-### 5.3 Voiceover player (req #4) — one component reused in editor preview, present mode, and public decks
+### 5.3 Voiceover player (req #4, implemented) — one component reused in editor preview, present mode, and public decks
 Big circular play button showing clip length → expands to transport: play/pause, back 10s, forward 10s, seekable timeline (a real `<input type=range>` — accessible by default), current/total time, CC toggle. Captions render in a live region below the slide, styled by tokens. `<audio preload="metadata">`, keyboard operable, visible focus states.
 
 ### 5.4 Library (req #20)
@@ -164,8 +166,8 @@ image opens a full-screen media picker containing upload + library views, alt
 text, decorative state, optional caption, and LU SVG frame selection. Deleting
 an asset warns that existing slide references will stop rendering it.
 
-### 5.6 Present mode (req #3)
-Dead simple: full-screen slide (Fullscreen API + fallback), ← → / space / click to advance, `Esc`/`G` for **overview grid** (all slides, click to jump), slide counter, theme toggle, voiceover player if present. Same renderer as the editor frame at viewport scale. `prefers-reduced-motion` respected (no slide transitions when set). Works for internal drafts and is identical to what an emailed client sees on the public URL — zero learning curve.
+### 5.6 Present mode (req #3, implemented)
+Dead simple: full-screen slide (Fullscreen API + fallback), ← → / space / click to advance, `Esc`/`G` for **overview grid** (all slides, click to jump), slide counter, persisted deck-specific theme toggle, and the shared voiceover player when present. It reuses `SlideCanvas`, respects `prefers-reduced-motion`, and works for internal drafts. The future public route can reuse the same presenter without teaching clients a second interface.
 
 ### 5.7 Publishing + status flow
 `draft → in_review → approved`. Approving prompts to confirm the public slug and sets `published_at`; the deck is then live at `decks.loyaltyuntapped.com/[client]/[deck]`. Un-approving (back to draft) 404s the public URL. Public pages: no auth, `noindex` robots meta (decks are for clients, not Google), OG tags with deck title + client/event branding for nice link previews in email.
@@ -223,8 +225,8 @@ One-time setup, ~10 minutes, then publishing is fully automatic forever:
 | Complete | Dashboard, deck creation, slide persistence/management, editor shell, layouts, autosave | Client settings/CRUD beyond deck creation is still planned |
 | Complete | Nested block editor, cross-container DnD, Outline, block library, media library, slide styles, SVG themes/masks | More real-world block/template coverage is needed |
 | **Next** | Audit collected marketing decks and implement the prioritized reusable block/template set | Keep content-model additions compatible with Design, Outline, library snapshots, and future present mode |
-| After templates | Voiceover upload, player, and manual caption cues | Reuse the existing `voiceovers` schema and Vercel Blob setup |
-| MVP finish | Internal present mode, review/status flow, public approved-deck route, DNS, end-to-end accessibility pass | Reuse the same non-editor `SlideCanvas` renderer and keep public routes logged-out accessible |
+| Complete | Voiceover upload, player, and manual caption cues | Uses the existing `voiceovers` schema and isolated Vercel Blob audio policy |
+| In progress | MVP finish: review/status flow, public approved-deck route, DNS, end-to-end accessibility pass | Internal present mode is complete; keep public routes logged-out accessible |
 | Post-MVP | Comments, client settings, merge tags, recording/transcription, analytics, PDF export | See parking lot below |
 
 The original Thursday target remains aggressive. Protect the shared renderer and

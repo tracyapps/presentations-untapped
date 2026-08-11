@@ -1,7 +1,8 @@
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { clients, decks, events, slides } from "@/lib/db/schema";
+import { clients, decks, events, slides, voiceovers } from "@/lib/db/schema";
 import type { SlideDoc } from "@/lib/slides/types";
+import type { VoiceoverData } from "@/lib/voiceover";
 
 export type EditorSlide = {
   id: string;
@@ -9,6 +10,7 @@ export type EditorSlide = {
   layoutKey: string;
   blocks: SlideDoc;
   updatedAt: string;
+  voiceover: VoiceoverData | null;
 };
 
 export type EditorDeck = {
@@ -46,16 +48,37 @@ export async function getEditorDeck(deckId: string): Promise<EditorDeck | null> 
       layoutKey: slides.layoutKey,
       blocks: slides.blocks,
       updatedAt: slides.updatedAt,
+      voiceoverId: voiceovers.id,
+      audioUrl: voiceovers.audioUrl,
+      audioMime: voiceovers.mime,
+      audioDurationSec: voiceovers.durationSec,
+      captionCues: voiceovers.cues,
+      voiceoverUpdatedAt: voiceovers.updatedAt,
     })
     .from(slides)
+    .leftJoin(voiceovers, eq(slides.id, voiceovers.slideId))
     .where(eq(slides.deckId, deckId))
     .orderBy(asc(slides.position));
 
   return {
     ...deck,
     slides: slideRows.map((slide) => ({
-      ...slide,
+      id: slide.id,
+      position: slide.position,
+      layoutKey: slide.layoutKey,
+      blocks: slide.blocks,
       updatedAt: slide.updatedAt.toISOString(),
+      voiceover: slide.voiceoverId && slide.audioUrl && slide.audioMime
+        && slide.audioDurationSec !== null && slide.captionCues && slide.voiceoverUpdatedAt
+        ? {
+          id: slide.voiceoverId,
+          audioUrl: slide.audioUrl,
+          mime: slide.audioMime,
+          durationSec: slide.audioDurationSec,
+          cues: slide.captionCues,
+          updatedAt: slide.voiceoverUpdatedAt.toISOString(),
+        }
+        : null,
     })),
   };
 }

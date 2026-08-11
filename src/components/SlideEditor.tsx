@@ -11,6 +11,7 @@ import {
 import SlideCanvas from "@/components/SlideCanvas";
 import MediaLibraryPanel from "@/components/MediaLibraryPanel";
 import MediaLibraryModal from "@/components/MediaLibraryModal";
+import VoiceoverEditor from "@/components/VoiceoverEditor";
 import type { EditorDeck, EditorSlide } from "@/lib/data/editor";
 import type { LibraryBlockItem } from "@/lib/data/library";
 import type { MediaAsset, MediaLibraryData } from "@/lib/data/media";
@@ -39,7 +40,8 @@ const CONTENT_PALETTE: Array<{ type: ContentType; label: string }> = [
   { type: "title", label: "Title" }, { type: "tagline", label: "Tagline" },
   { type: "paragraph", label: "Paragraph" }, { type: "blockquote", label: "Quote" },
   { type: "callout", label: "Callout" }, { type: "image", label: "Image" },
-  { type: "list", label: "List" }, { type: "statCard", label: "Stat card" },
+  { type: "list", label: "List" }, { type: "process", label: "Process" },
+  { type: "statCard", label: "Stat card" },
   { type: "table", label: "Table" }, { type: "pricingTable", label: "Pricing" },
   { type: "chart", label: "Chart" },
 ];
@@ -85,6 +87,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   const [libraryTarget, setLibraryTarget] = useState<Node | null>(null);
   const [libraryName, setLibraryName] = useState("");
   const [mediaTargetId, setMediaTargetId] = useState<string | null>(null);
+  const [voiceoverDirty, setVoiceoverDirty] = useState(false);
   const [isAdding, startAdding] = useTransition();
   const [isSavingLibrary, startSavingLibrary] = useTransition();
   const docRef = useRef(doc);
@@ -94,6 +97,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     () => layoutKey !== savedLayoutKey || JSON.stringify(doc) !== JSON.stringify(savedDoc),
     [doc, layoutKey, savedDoc, savedLayoutKey],
   );
+  const hasUnsavedChanges = dirty || voiceoverDirty;
   const mediaTarget = useMemo(() => {
     if (!mediaTargetId) return null;
     const node = findNode(doc, mediaTargetId);
@@ -174,13 +178,13 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
 
   useEffect(() => {
     function guard(event: BeforeUnloadEvent) {
-      if (!dirty) return;
+      if (!hasUnsavedChanges) return;
       event.preventDefault();
       event.returnValue = "";
     }
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
-  }, [dirty]);
+  }, [hasUnsavedChanges]);
 
   function updateText(id: string, text: string) {
     if (saveState !== "conflict") {
@@ -256,7 +260,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   }
 
   function confirmNavigate(event: React.MouseEvent) {
-    if (dirty && !window.confirm("Leave before your latest changes are saved?")) event.preventDefault();
+    if (hasUnsavedChanges && !window.confirm("Leave before your latest changes are saved?")) event.preventDefault();
   }
 
   function openLibraryDialog(node: Node) {
@@ -421,6 +425,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
         </nav>
         <div className="editor-actions">
           <span className={`save-state save-state-${visibleSaveState}`} aria-live="polite">{stateLabel[visibleSaveState]}</span>
+          <Link className="button button-secondary" href={`/decks/${deck.id}/present`} onClick={confirmNavigate}>Present</Link>
           <Link className="button button-secondary" href="/decks" onClick={confirmNavigate}>Close</Link>
           <button className="button button-primary" type="button" onClick={() => void save()} disabled={!dirty || saveState === "saving" || saveState === "conflict"}>Save</button>
         </div>
@@ -452,7 +457,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
 
         <aside className="block-palette" aria-label="Block palette">
           {tab === "voiceover" ? (
-            <div className="palette-note"><strong>Voiceover tools</strong><p>Upload and caption controls arrive in the next milestone.</p></div>
+            <div className="palette-note"><strong>Voiceover tools</strong><p>Each slide can have one reusable player and a manually timed caption track.</p></div>
           ) : (
             <>
               <PaletteSectionPanel id="layouts" label="Layouts" open={paletteState.layouts} onToggle={() => togglePaletteSection("layouts")}>
@@ -517,7 +522,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             onSwapColumns: swapColumns,
           }} /></div>}
           {tab === "outline" && <div className="outline-workspace"><OutlineTree nodes={doc.blocks} media={{ items: mediaItems, onOpen: setMediaTargetId, onAssign: assignMediaToImage }} onText={updateText} onUpdate={updateNode} onMove={dropBlock} onSwapColumns={(id) => markDoc(swapLayoutChildren(docRef.current, id))} /></div>}
-          {tab === "voiceover" && <div className="voiceover-empty"><p className="eyebrow">Voiceover</p><h2>Add narration after the editing foundation is complete</h2><p>The player, audio upload, and caption cue editor are the following roadmap milestone.</p></div>}
+          <div hidden={tab !== "voiceover"}><VoiceoverEditor deckId={deck.id} slideId={initialSlide.id} configured={mediaLibrary.configured} initialVoiceover={initialSlide.voiceover} active={tab === "voiceover"} onDirtyChange={setVoiceoverDirty} /></div>
         </section>
       </div>
       {libraryTarget && (
@@ -650,6 +655,10 @@ function OutlineNode({ node, media, onText, onUpdate, onSwapColumns, dnd }: { no
         <Check label="Numbered list" checked={node.props.ordered} onChange={(checked) => onUpdate(node.id, (current) => current.type === "list" ? { ...current, props: { ...current.props, ordered: checked } } : current)} />
         <label>Items <small>One item per line</small><textarea rows={5} value={node.props.items.map(plainText).join("\n")} onChange={(event) => onUpdate(node.id, (current) => current.type === "list" ? { ...current, props: { ...current.props, items: event.target.value.split("\n").map((text) => [{ text }]) } } : current)} /></label>
       </>}
+      {node.type === "process" && <>
+        <label>Direction<select value={node.props.direction} onChange={(event) => onUpdate(node.id, (current) => current.type === "process" ? { ...current, props: { ...current.props, direction: event.target.value as "horizontal" | "vertical" } } : current)}><option value="horizontal">Horizontal timeline</option><option value="vertical">Vertical process</option></select></label>
+        <label>Steps <small>One step per line; use Title | Optional detail</small><textarea rows={6} value={node.props.steps.map((step) => `${step.title}${step.detail ? ` | ${step.detail}` : ""}`).join("\n")} onChange={(event) => onUpdate(node.id, (current) => current.type === "process" ? { ...current, props: { ...current.props, steps: event.target.value.split("\n").filter((line) => line.trim()).map(splitProcessStep) } } : current)} /></label>
+      </>}
       {node.type === "statCard" && <>
         <Field label="Value" value={node.props.value} onChange={(value) => onUpdate(node.id, (current) => current.type === "statCard" ? { ...current, props: { ...current.props, value } } : current)} />
         <Field label="Label" value={node.props.label} onChange={(value) => onUpdate(node.id, (current) => current.type === "statCard" ? { ...current, props: { ...current.props, label: value } } : current)} />
@@ -711,4 +720,10 @@ function Check({ label, checked, onChange }: { label: string; checked: boolean; 
 
 function splitRow(value: string): string[] {
   return value.split("|").map((part) => part.trim());
+}
+
+function splitProcessStep(value: string): ContentProps["process"]["steps"][number] {
+  const [title = "", ...detailParts] = value.split("|").map((part) => part.trim());
+  const detail = detailParts.join(" | ");
+  return detail ? { title, detail } : { title };
 }

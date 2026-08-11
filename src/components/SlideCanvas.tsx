@@ -206,6 +206,12 @@ function RenderContent({ node }: { node: ContentNode }) {
       const List = node.props.ordered ? "ol" : "ul";
       return <List className="slide-list">{node.props.items.map((item, index) => <li key={index}><Rich value={item} /></li>)}</List>;
     }
+    case "process": return <ol className={`slide-process is-${node.props.direction}`}>
+      {node.props.steps.map((step, index) => <li key={index}>
+        <span className="slide-process-marker" aria-hidden="true">{index + 1}</span>
+        <div><strong>{step.title}</strong>{step.detail && <small>{step.detail}</small>}</div>
+      </li>)}
+    </ol>;
     case "statCard": return <div className="slide-stat"><strong>{node.props.value}</strong><span>{node.props.label}</span>{node.props.caption && <small>{node.props.caption}</small>}</div>;
     case "table": return <table className="slide-data-table"><thead><tr>{node.props.header.map((cell, i) => <th key={i}>{cell}</th>)}</tr></thead><tbody>{node.props.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>)}</tbody></table>;
     case "pricingTable": return <div className="slide-pricing">{node.props.columns.map((column, i) => <div className={column.highlighted ? "is-highlighted" : ""} key={i}><h3>{column.name}</h3><strong>{column.price}</strong><ul>{column.features.map((feature, j) => <li key={j}>{feature}</li>)}</ul></div>)}</div>;

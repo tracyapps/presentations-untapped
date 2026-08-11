@@ -1,6 +1,6 @@
 # Development handoff
 
-_Snapshot: August 11, 2026 · branch `main` · base commit `ab6c35f` (`image uploads`)_
+_Snapshot: August 11, 2026 · branch `main` · base commit `74f52fe` (`images, image library, and media storage settings`)_
 
 Read this file first when opening a new development session. `README.md` is the
 setup/status overview; `PLAN.md` is the full product and technical direction.
@@ -29,35 +29,34 @@ exist. The core editing foundation is working:
 - Reusable media: upload by browse or file drop, assign existing media by drop,
   delete assets, and choose/edit an image in a full-screen media modal with alt
   text, decorative state, caption, and LU SVG frame.
+- A provisional marketing-content inventory in `BLOCK-INVENTORY.md`, plus a
+  reusable horizontal/vertical process block and matching Timeline/Process
+  slide templates based on the available LU one-sheets.
+- Per-slide MP3/M4A/WAV upload and replacement, a shared keyboard-operable
+  player, Blob cleanup on replacement/deletion, and manually timed caption cues
+  with browser/server validation.
+- Internal present mode for draft and later-stage decks: shared slide/player
+  rendering, click/keyboard navigation, overview grid, persisted theme choice,
+  full-screen support, and reduced-motion handling.
 - Contrast-checked responsive surfaces, three fixed SVG slide patterns, and 18
   LU image masks.
 
 ## Uncommitted working tree
 
-At handoff time the features after `ab6c35f` are still uncommitted. Preserve all
-of these changes and untracked files; they are one connected editor/media slice,
-not disposable experiments.
-
-Primary new files:
-
-- `src/app/api/media/route.ts`
-- `src/components/ImageFramePicker.tsx`
-- `src/components/MediaLibraryModal.tsx`
-- `src/lib/media-dnd.ts`
-- `src/lib/media-storage.ts`
-
-Primary modified surfaces include `SlideEditor.tsx`, `SlideCanvas.tsx`,
-`BlockDnd.tsx`, `MediaLibraryPanel.tsx`, slide types/editor helpers, the Blob
-upload route/data loader, global styles, media policy checks, environment docs,
-and repository documentation. Run `git status --short` for the authoritative
-list before editing or committing.
+The process-block/template and Voiceover slices are uncommitted. Preserve
+`BLOCK-INVENTORY.md`, the related slide model/rendering/style changes, the audio
+policy and Voiceover work, and the present route/component/styles. Run
+`git status --short` for the authoritative list.
 
 ## Next development task
 
-Marketing is gathering representative slide decks. Resume by inventorying those
-decks and producing a prioritized matrix of required content blocks and reusable
-slide templates. Then implement the highest-value missing blocks as thin vertical
-slices through:
+Marketing is still gathering representative slide decks. Reconcile
+`BLOCK-INVENTORY.md` when they arrive. The next independent application milestone
+is the status/review workflow followed by the public approved-deck route. Reuse
+the implemented `PresentDeck`, `SlideCanvas`, and `VoiceoverPlayer` for public
+rendering rather than introducing a separate presentation UI.
+
+For later block additions, continue using thin vertical slices through:
 
 1. the shared `ContentNode` type and default-node factory;
 2. Design rendering and editor chrome;
@@ -110,6 +109,7 @@ Most recent focused checks passed:
 
 ```bash
 npx tsc --noEmit
+npm run test:audio    # formats, 25 MB limit, prefix, package, env contract
 npm run test:styles   # 63 readable pairs, 3 SVG themes, 18 masks
 npm run test:media    # formats, size, prefix, package, env contract
 git diff --check
@@ -118,5 +118,4 @@ git diff --check
 Chrome verification covered media reuse/deletion/modal editing, nested
 cross-container dragging, column swapping, editor overflow reachability, and the
 content-only natural-height Outline view. Run a production build only with the
-dev server stopped; the last isolated build passed on August 10.
-
+dev server stopped; the last isolated build passed on August 11.

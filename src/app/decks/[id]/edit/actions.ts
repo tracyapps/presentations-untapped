@@ -21,7 +21,7 @@ export type SaveLibraryItemResult =
 
 const contentTypes = new Set([
   "title", "tagline", "blockquote", "callout", "paragraph", "image", "list",
-  "statCard", "table", "pricingTable", "chart",
+  "process", "statCard", "table", "pricingTable", "chart",
 ]);
 const layoutTypes = new Set(["row", "columns", "grid", "group"]);
 

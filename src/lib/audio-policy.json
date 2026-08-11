@@ -1,0 +1,11 @@
+{
+  "prefix": "audio/",
+  "maximumSizeInBytes": 26214400,
+  "allowedContentTypes": [
+    "audio/mpeg",
+    "audio/mp4",
+    "audio/x-m4a",
+    "audio/wav",
+    "audio/x-wav"
+  ]
+}

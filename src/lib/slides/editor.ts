@@ -12,6 +12,11 @@ export function createContentNode(type: ContentType): ContentNode {
     case "paragraph": return { ...base, type, props: { text: [{ text: "Add supporting copy." }] } };
     case "image": return { ...base, type, props: { src: "", alt: "" } };
     case "list": return { ...base, type, props: { ordered: false, items: [[{ text: "First point" }], [{ text: "Second point" }]] } };
+    case "process": return { ...base, type, props: { direction: "horizontal", steps: [
+      { title: "First step", detail: "What happens here" },
+      { title: "Second step", detail: "What happens next" },
+      { title: "Third step", detail: "The resulting outcome" },
+    ] } };
     case "statCard": return { ...base, type, props: { value: "0%", label: "Key metric" } };
     case "table": return { ...base, type, props: { header: ["Column 1", "Column 2"], rows: [["Value", "Value"]] } };
     case "pricingTable": return { ...base, type, props: { columns: [

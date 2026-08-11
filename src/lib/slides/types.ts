@@ -44,7 +44,7 @@ export type LayoutNode = {
 
 export type ContentType =
   | "title" | "tagline" | "blockquote" | "callout" | "paragraph"
-  | "image" | "list" | "statCard" | "table" | "pricingTable" | "chart";
+  | "image" | "list" | "process" | "statCard" | "table" | "pricingTable" | "chart";
 
 /** Inline rich text: minimal marks only (req #19 — no color marks). */
 export type RichText = Array<{
@@ -63,6 +63,10 @@ export type ContentProps = {
   paragraph:  { text: RichText };
   image:      { src: string; alt: string; caption?: string; decorative?: boolean; frame?: ImageFrameKey }; // alt required unless decorative
   list:       { ordered: boolean; items: RichText[] };
+  process:    {
+    direction: "horizontal" | "vertical";
+    steps: Array<{ title: string; detail?: string }>;
+  };
   statCard:   { value: string; label: string; caption?: string };
   table:      { header: string[]; rows: string[][] };
   pricingTable: {

@@ -82,6 +82,38 @@ export const LAYOUTS: LayoutDef[] = [
     preview: `<svg viewBox="0 0 160 90"><rect x="16" y="12" width="90" height="9" rx="2"/><rect x="16" y="32" width="38" height="40" rx="3"/><rect x="61" y="32" width="38" height="40" rx="3"/><rect x="106" y="32" width="38" height="40" rx="3"/></svg>`,
   },
   {
+    key: "horizontal-timeline",
+    name: "Horizontal Timeline",
+    build: () => ({
+      version: 1,
+      blocks: [
+        content("title", { text: t("How it unfolds") }),
+        content("process", { direction: "horizontal", steps: [
+          { title: "First milestone", detail: "Set the starting point" },
+          { title: "Next milestone", detail: "Build momentum" },
+          { title: "Outcome", detail: "Show the change" },
+        ] }),
+      ],
+    }),
+    preview: `<svg viewBox="0 0 160 90"><rect x="16" y="12" width="90" height="9" rx="2"/><path d="M28 51h104" stroke="currentColor" stroke-width="2"/><circle cx="28" cy="51" r="6"/><circle cx="80" cy="51" r="6"/><circle cx="132" cy="51" r="6"/></svg>`,
+  },
+  {
+    key: "vertical-process",
+    name: "Vertical Process",
+    build: () => ({
+      version: 1,
+      blocks: [
+        content("title", { text: t("The process") }),
+        content("process", { direction: "vertical", steps: [
+          { title: "Start", detail: "Activate the opportunity" },
+          { title: "Build", detail: "Bring people into the experience" },
+          { title: "Repeat", detail: "Turn participation into a habit" },
+        ] }),
+      ],
+    }),
+    preview: `<svg viewBox="0 0 160 90"><rect x="16" y="10" width="90" height="8" rx="2"/><rect x="28" y="27" width="104" height="13" rx="3"/><path d="M80 40v6" stroke="currentColor" stroke-width="2"/><rect x="28" y="46" width="104" height="13" rx="3"/><path d="M80 59v6" stroke="currentColor" stroke-width="2"/><rect x="28" y="65" width="104" height="13" rx="3"/></svg>`,
+  },
+  {
     key: "quote",
     name: "Quote",
     build: () => ({
