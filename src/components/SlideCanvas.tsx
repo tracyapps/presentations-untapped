@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { BlockDropZone, isActiveTarget, type BlockDndController, type BlockDropTarget, useBlockDnd } from "@/components/BlockDnd";
 import IconTooltip from "@/components/IconTooltip";
+import type { MediaAsset } from "@/lib/data/media";
+import { hasMediaDrag, readMediaDrag } from "@/lib/media-dnd";
 import { frameByKey, patternStyle, surfaceStyle } from "@/lib/slides/styles";
 import type { ContentNode, LayoutNode, Node, RichText, SlideDoc } from "@/lib/slides/types";
 import { isLayout } from "@/lib/slides/types";
@@ -12,6 +15,9 @@ export type SlideCanvasEditor = {
   onMove: (node: Node, direction: -1 | 1) => void;
   onDrop: (sourceId: string, target: BlockDropTarget) => void;
   onSaveToLibrary: (node: Node) => void;
+  onEditImage: (node: Extract<ContentNode, { type: "image" }>) => void;
+  onAssignMedia: (id: string, asset: MediaAsset) => void;
+  onSwapColumns: (node: LayoutNode) => void;
 };
 
 function Rich({ value }: { value: RichText }) {
@@ -30,7 +36,8 @@ export default function SlideCanvas({ doc, theme, editor }: { doc: SlideDoc; the
     ? patternStyle(doc.style.pattern)
     : surfaceStyle(doc.style?.surface, theme);
   return (
-    <div className="slide-viewport" data-theme={theme} data-pattern={doc.style?.pattern ?? "none"} style={slideStyle}>
+    <div className={`slide-viewport${editor ? " is-editing" : ""}`} data-theme={theme} data-pattern={doc.style?.pattern ?? "none"} style={slideStyle}>
+      {editor && <span className="slide-boundary-marker" aria-hidden="true">16:9 slide boundary</span>}
       {editor ? (
         <NodeList className="slide-canvas dnd-node-list-vertical" nodes={doc.blocks} parentId={null} axis="vertical" editor={editor} dnd={dnd} theme={theme} />
       ) : (
@@ -65,6 +72,7 @@ function NodeList({ className, nodes, parentId, axis, editor, dnd, style, theme 
 }
 
 function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" | "dark"; editor?: SlideCanvasEditor; dnd?: BlockDndController }) {
+  const [mediaDragOver, setMediaDragOver] = useState(false);
   const contentStyle = !isLayout(node) ? surfaceStyle(node.style?.surface, theme) : undefined;
   const rendered = isLayout(node)
     ? <RenderLayout node={node} theme={theme} editor={editor} dnd={dnd} />
@@ -77,23 +85,21 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
       tabIndex={0}
       aria-label={`${node.type} block`}
     >
-      <header
-        className="block-chrome"
-        draggable
-        onDragStart={(event) => {
-          if ((event.target as HTMLElement).closest("button")) {
-            event.preventDefault();
-            return;
-          }
-          dnd?.start(event, node.id, event.currentTarget.closest(".editable-slide-block"));
-        }}
-        onDragEnd={() => dnd?.finish()}
-      >
-        <IconTooltip label={<><strong>Drag</strong> block</>} description="Move it to a new position.">
-          <span className="block-drag-handle" tabIndex={0} aria-label={`Drag ${node.type} block`}>⠿</span>
-        </IconTooltip>
-        <strong>{node.type}</strong>
-        <div>
+      <header className="block-chrome">
+        <div
+          className="block-drag-region"
+          draggable
+          onDragStart={(event) => {
+            dnd?.start(event, node.id, event.currentTarget.closest(".editable-slide-block"));
+          }}
+          onDragEnd={() => dnd?.finish()}
+        >
+          <IconTooltip label={<><strong>Drag</strong> block</>} description="Move it to a new position.">
+            <span className="block-drag-handle" tabIndex={0} aria-label={`Drag ${node.type} block`}>⠿</span>
+          </IconTooltip>
+          <strong>{node.type}</strong>
+        </div>
+        <div className="block-actions">
           <IconTooltip label={<>Move <strong>up</strong></>} description={`Move this ${node.type} earlier.`}>
             <button type="button" onClick={() => editor.onMove(node, -1)} aria-label={`Move ${node.type} up`}>↑</button>
           </IconTooltip>
@@ -106,12 +112,57 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
           <IconTooltip label={<>Save to <strong>library</strong></>} description="Keep a reusable copy of this block.">
             <button type="button" onClick={() => editor.onSaveToLibrary(node)} aria-label={`Save ${node.type} to library`}>☆</button>
           </IconTooltip>
+          {isLayout(node) && node.type === "columns" && node.children.length > 1 && <IconTooltip label={<>Swap <strong>columns</strong></>} description="Reverse the order of the column contents.">
+            <button
+              type="button"
+              onPointerDown={(event) => { if (event.button === 0) { event.preventDefault(); editor.onSwapColumns(node); } }}
+              onClick={(event) => { if (event.detail === 0) editor.onSwapColumns(node); }}
+              aria-label="Swap columns"
+            >⇄</button>
+          </IconTooltip>}
           <IconTooltip label={<><span className="tooltip-accent">Delete</span> block</>} description="This asks for confirmation.">
             <button type="button" onClick={() => editor.onDelete(node)} aria-label={`Delete ${node.type}`}>×</button>
           </IconTooltip>
         </div>
       </header>
-      <div className="editable-block-content">{rendered}</div>
+      <div
+        className={`editable-block-content${node.type === "image" ? " is-image-picker" : ""}${mediaDragOver ? " is-media-drop-target" : ""}`}
+        role={node.type === "image" ? "button" : undefined}
+        tabIndex={node.type === "image" ? 0 : undefined}
+        aria-label={node.type === "image" ? "Open media library for image block" : undefined}
+        onClick={() => { if (node.type === "image") editor.onEditImage(node); }}
+        onKeyDown={(event) => {
+          if (node.type === "image" && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            editor.onEditImage(node);
+          }
+        }}
+        onDragEnter={(event) => {
+          if (node.type !== "image" || !hasMediaDrag(event.dataTransfer)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setMediaDragOver(true);
+        }}
+        onDragOver={(event) => {
+          if (node.type !== "image" || !hasMediaDrag(event.dataTransfer)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          event.dataTransfer.dropEffect = "copy";
+        }}
+        onDragLeave={(event) => {
+          if (event.relatedTarget instanceof HTMLElement && event.currentTarget.contains(event.relatedTarget)) return;
+          setMediaDragOver(false);
+        }}
+        onDrop={(event) => {
+          if (node.type !== "image") return;
+          const asset = readMediaDrag(event.dataTransfer);
+          if (!asset) return;
+          event.preventDefault();
+          event.stopPropagation();
+          setMediaDragOver(false);
+          editor.onAssignMedia(node.id, asset);
+        }}
+      >{rendered}</div>
     </section>
   );
 }
@@ -144,11 +195,12 @@ function RenderContent({ node }: { node: ContentNode }) {
     case "image": {
       const frame = frameByKey(node.props.frame);
       const frameStyle = frame ? { WebkitMaskImage: `url("${frame.asset}")`, maskImage: `url("${frame.asset}")` } : undefined;
-      return node.props.src ? (
+      const image = node.props.src ? (
       // User-provided image URLs can come from configured client or Blob hosts.
       // eslint-disable-next-line @next/next/no-img-element
         <img className={`slide-image${frame ? " has-frame" : ""}`} style={frameStyle} src={node.props.src} alt={node.props.decorative ? "" : node.props.alt} />
       ) : <div className={`slide-image-placeholder${frame ? " has-frame" : ""}`} style={frameStyle} role="img" aria-label="Empty image block">Image</div>;
+      return <figure className="slide-figure">{image}{node.props.caption && <figcaption>{node.props.caption}</figcaption>}</figure>;
     }
     case "list": {
       const List = node.props.ordered ? "ol" : "ul";

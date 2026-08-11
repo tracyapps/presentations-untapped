@@ -8,6 +8,7 @@ export type BlockDropTarget = {
 };
 
 type Axis = "horizontal" | "vertical";
+const BLOCK_DRAG_TYPE = "application/x-presentations-block";
 
 function targetKey(target: BlockDropTarget): string {
   return `${target.parentId ?? "root"}:${target.index}`;
@@ -22,7 +23,7 @@ export function useBlockDnd(
   function start(event: React.DragEvent<HTMLElement>, sourceId: string, ghost?: Element | null) {
     event.stopPropagation();
     event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("application/x-presentations-block", sourceId);
+    event.dataTransfer.setData(BLOCK_DRAG_TYPE, sourceId);
     event.dataTransfer.setData("text/plain", sourceId);
     if (ghost) event.dataTransfer.setDragImage(ghost, 24, 12);
     setDraggingId(sourceId);
@@ -37,7 +38,7 @@ export function useBlockDnd(
     event.preventDefault();
     event.stopPropagation();
     const sourceId = draggingId
-      ?? event.dataTransfer.getData("application/x-presentations-block")
+      ?? event.dataTransfer.getData(BLOCK_DRAG_TYPE)
       ?? event.dataTransfer.getData("text/plain");
     if (sourceId) onMove(sourceId, target);
     finish();
@@ -62,6 +63,7 @@ export function BlockDropZone({
   target: BlockDropTarget;
 }) {
   const active = isActiveTarget(controller, target);
+  const accepts = (event: React.DragEvent<HTMLElement>) => !!controller.draggingId || Array.from(event.dataTransfer.types).includes(BLOCK_DRAG_TYPE);
   return (
     <div
       className={`block-drop-zone block-drop-zone-${axis}${active ? " is-active" : ""}`}
@@ -69,11 +71,13 @@ export function BlockDropZone({
       data-drop-index={target.index}
       data-drop-parent={target.parentId ?? "root"}
       onDragEnter={(event) => {
+        if (!accepts(event)) return;
         event.preventDefault();
         event.stopPropagation();
         controller.setActiveTarget(target);
       }}
       onDragOver={(event) => {
+        if (!accepts(event)) return;
         event.preventDefault();
         event.stopPropagation();
         event.dataTransfer.dropEffect = "move";
@@ -82,7 +86,7 @@ export function BlockDropZone({
       onDragLeave={() => {
         if (active) controller.setActiveTarget(null);
       }}
-      onDrop={(event) => controller.drop(event, target)}
+      onDrop={(event) => { if (accepts(event)) controller.drop(event, target); }}
     >
       <span>Drop block</span>
     </div>

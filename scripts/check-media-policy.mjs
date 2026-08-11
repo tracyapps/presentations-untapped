@@ -12,6 +12,8 @@ if (JSON.stringify(policy.allowedContentTypes) !== JSON.stringify(expectedTypes)
 }
 if (policy.allowedContentTypes.includes("image/svg+xml")) throw new Error("SVG uploads must remain disabled because they can contain active content.");
 if (!packageJson.dependencies?.["@vercel/blob"]) throw new Error("@vercel/blob must be installed for media uploads.");
-if (!/^BLOB_READ_WRITE_TOKEN=/m.test(envExample)) throw new Error(".env.example must document BLOB_READ_WRITE_TOKEN.");
+if (!/^BLOB_READ_WRITE_TOKEN=/m.test(envExample) || !/^media_READ_WRITE_TOKEN=/m.test(envExample)) {
+  throw new Error(".env.example must document default and media-named Blob token variables.");
+}
 
 console.log("Media policy checks passed: public image formats, 15 MB limit, isolated Blob prefix, package, and env contract.");

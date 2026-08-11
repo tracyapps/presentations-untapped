@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import type { ContentNode, ContentType, Node, SlideDoc } from "./types";
+import type { ContentNode, ContentType, LayoutNode, LayoutType, Node, SlideDoc } from "./types";
 import { isLayout } from "./types";
 
 export function createContentNode(type: ContentType): ContentNode {
@@ -25,6 +25,20 @@ export function createContentNode(type: ContentType): ContentNode {
 
 export function appendContent(doc: SlideDoc, type: ContentType): SlideDoc {
   return { ...doc, blocks: [...doc.blocks, createContentNode(type)] };
+}
+
+export function createLayoutNode(type: LayoutType): LayoutNode {
+  return {
+    id: nanoid(8),
+    kind: "layout",
+    type,
+    props: type === "columns" || type === "grid" ? { cols: 2 } : {},
+    children: [],
+  };
+}
+
+export function appendLayout(doc: SlideDoc, type: LayoutType): SlideDoc {
+  return { ...doc, blocks: [...doc.blocks, createLayoutNode(type)] };
 }
 
 export function cloneNode(node: Node): Node {
@@ -76,6 +90,19 @@ export function moveNode(doc: SlideDoc, id: string, direction: -1 | 1): SlideDoc
       const next = [...nodes];
       [next[index], next[destination]] = [next[destination], next[index]];
       return next;
+    }),
+  };
+}
+
+export function swapLayoutChildren(doc: SlideDoc, id: string): SlideDoc {
+  return {
+    ...doc,
+    blocks: doc.blocks.map(function swap(node): Node {
+      if (!isLayout(node)) return node;
+      if (node.id === id && node.type === "columns" && node.children.length > 1) {
+        return { ...node, children: [...node.children].reverse() };
+      }
+      return { ...node, children: node.children.map(swap) };
     }),
   };
 }

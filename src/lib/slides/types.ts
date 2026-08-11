@@ -61,7 +61,7 @@ export type ContentProps = {
   blockquote: { text: RichText; attribution?: string };
   callout:    { text: RichText; variant: "accent" | "teal" | "blue" };
   paragraph:  { text: RichText };
-  image:      { src: string; alt: string; decorative?: boolean; frame?: ImageFrameKey }; // alt required unless decorative
+  image:      { src: string; alt: string; caption?: string; decorative?: boolean; frame?: ImageFrameKey }; // alt required unless decorative
   list:       { ordered: boolean; items: RichText[] };
   statCard:   { value: string; label: string; caption?: string };
   table:      { header: string[]; rows: string[][] };

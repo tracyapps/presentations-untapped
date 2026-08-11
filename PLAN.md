@@ -2,7 +2,25 @@
 
 Internal tool for spinning up client pitch decks: block-based slide editor, reusable library, per-slide voiceovers with captions, internal draft review, and one-click publishing to a public URL under loyaltyuntapped.com.
 
-**Deadline: usable by Thursday EOD (Aug 13, 2026).** Phasing below is built around that.
+**Target: usable by Thursday EOD (Aug 13, 2026).** The reconciled sequence in
+§9 reflects the actual August 11 implementation state.
+
+## Implementation snapshot — August 11, 2026
+
+The deployed and local app currently has Clerk authentication, Neon persistence,
+deck creation/dashboard flows, a three-view editor shell, safe slide autosave,
+layout migration, slide management, nested structural blocks, cross-container
+drag/drop, reusable block snapshots, a Vercel Blob media library, contrast-safe
+slide styles, SVG backgrounds, and LU image masks. Design mode shows a labeled
+16:9 boundary while keeping overflow reachable for editing. Outline is a
+natural-height content/structure editor and intentionally contains no design
+controls. Voiceover, present mode, review/publishing, and public routes remain
+planned.
+
+**Next development milestone:** turn the collected real marketing decks into a
+prioritized block/template inventory, then implement the missing high-value
+content blocks on top of the current editor foundation. See `HANDOFF.md` for the
+exact pickup checklist and uncommitted work summary.
 
 ---
 
@@ -15,18 +33,21 @@ Internal tool for spinning up client pitch decks: block-based slide editor, reus
 | Database | Neon Postgres (free tier) | free | 0.5GB is plenty; branchable for testing. ⚠️ autosuspends when idle → first query after a lull takes ~500ms. Acceptable for an internal tool |
 | ORM | Drizzle | free | Type-safe, lightweight, plays well with Neon serverless driver |
 | Auth | Clerk (free tier, invite-only) | free to 10k MAU | Decided. Drop-in `<SignIn/>`, org invites, no SSO needed. Disable public sign-ups; team members are invited by email from the Clerk dashboard |
-| File storage (audio, logos) | Vercel Blob | free tier | Simplest integration. Migrate to Cloudflare R2 (10GB free) if we outgrow it |
-| Rich text (basic formatting) | TipTap (core, free) | free | Bold/italic/underline/size only; trimmed extension set. Color deliberately NOT exposed — theme tokens own color |
-| Drag & drop | dnd-kit | free | Best keyboard/screen-reader story of the React DnD libs (built-in keyboard sensor + announcements) |
-| Editor state | Zustand + debounced autosave | free | Simple, no boilerplate |
+| File storage (images now; audio later) | Vercel Blob | free tier | Public, cacheable media URLs; migrate to Cloudflare R2 if needed |
+| Rich text | Typed JSON runs + native inputs | free | Current Outline editing preserves stored marks while keeping design controls out of Outline; a richer Design-side control can be added later |
+| Drag & drop | Native HTML5 DnD + typed controller | free | Current implementation supports nested cross-container moves, ghosting, and drop indicators; visible move buttons remain the keyboard fallback |
+| Editor state | React state + server actions + debounced autosave | free | Conflict-aware persistence without a separate client store; Zustand is installed but not currently required by the editor |
 
 **Total running cost today: $0.** First real cost is Vercel Pro ($20/mo) when the tool is used commercially in earnest.
 
-### Accounts you (tapps) need to create — ~15 min, I can't do these for you
-1. **Vercel** — vercel.com, sign up with GitHub (create a free GitHub account/repo for this project if you don't have one you want to use — Vercel deploys from git).
-2. **Neon** — neon.tech, create project `presentations-untapped`, copy the connection string.
-3. **Clerk** — clerk.com, create application, **disable sign-ups** (Restrictions → Sign-up mode: Restricted), copy publishable + secret keys.
-4. Paste all keys into `.env.local` (template provided in repo) and into Vercel → Project → Environment Variables.
+### External services — current status
+
+- **Vercel:** project deployed successfully from the Git repository.
+- **Neon:** project created, schema pushed, and live data verified locally and on Vercel.
+- **Clerk:** application configured and the first user created; protected routes work.
+- **Vercel Blob:** connected and verified for local upload, reuse, and deletion.
+- Keep `.env.local` and Vercel Development/Preview/Production variables aligned
+  using `.env.example` as the non-secret contract.
 
 ---
 
@@ -63,7 +84,7 @@ Key decisions:
 ### Block tree shape (shared TypeScript types)
 
 ```ts
-type SlideDoc = { version: 1; blocks: Node[] };
+type SlideDoc = { version: 1; blocks: Node[]; style?: { surface?: string; pattern?: string } };
 type Node = LayoutNode | ContentNode;
 
 type LayoutNode = {
@@ -72,6 +93,7 @@ type LayoutNode = {
   type: "row" | "columns" | "grid" | "group";
   props: { cols?: number; gap?: string; align?: string };
   children: Node[];
+  style?: { surface?: string };
 };
 
 type ContentNode = {
@@ -79,7 +101,8 @@ type ContentNode = {
   kind: "content";
   type: "title" | "tagline" | "blockquote" | "callout" | "paragraph"
       | "image" | "list" | "statCard" | "table" | "pricingTable" | "chart";
-  props: Record<string, unknown>;   // per-type: rich-text JSON, src/alt, table cells, stat values…
+  props: Record<string, unknown>;   // rich text; image src/media/alt/caption/frame; tables; stats…
+  style?: { surface?: string };
 };
 ```
 
@@ -98,10 +121,10 @@ Layouts are named skeleton templates (`title-paragraph`, `two-column`, `title-on
 /decks                    → dashboard: grid + table views, search, sort (created/modified), grouped by client
 /decks/new                → name + pick/create client (+ optional event)
 /decks/[id]/edit/[slide]  → editor: Design | Outline | Voiceover tabs
-/decks/[id]/present       → internal present mode (works for draft decks too — for virtual calls)
-/clients                  → client list + settings panel (details, notes, events)  [minimal Thu, full Fri]
-/library                  → manage saved blocks/slides
-/p/[clientSlug]/[deckSlug]→ PUBLIC published deck (approved only) — served at decks.loyaltyuntapped.com/[clientSlug]/[deckSlug]
+/decks/[id]/present       → internal present mode (planned; works for draft decks too)
+/clients                  → client list + settings panel (planned)
+/library                  → manage saved blocks (slide library items planned)
+/p/[clientSlug]/[deckSlug]→ public approved deck (planned) — served at decks.loyaltyuntapped.com/[clientSlug]/[deckSlug]
 ```
 
 Clerk middleware protects everything except `/p/**` (and static assets). **Gotcha:** getting the public matcher right is a classic Clerk footgun — test logged-out access to a published deck explicitly.
@@ -115,14 +138,13 @@ Grid (thumbnail cards) and table (list) views, toggle persisted per user (localS
 
 ### 5.2 Editor — three tabs (req #11–19)
 
-**Shared chrome:** tabs (Design / Outline / Voiceover), "editing slide N of M", `+` add slide, slide strip/switcher, layout dropdown (visual previews), split SAVE button (Save / Save & close / Save & new slide / Save as duplicate), Cancel, unsaved-changes indicator, autosave (debounced ~2s after last change; save button disables when clean; `beforeunload` guard when dirty).
+**Shared chrome (implemented):** tabs (Design / Outline / Voiceover), "editing slide N of M", add/duplicate/delete slide controls, slide strip/switcher, collapsible Layout/Content/Library/Media palettes with local remembered state, Save + Close, a diff-derived save-state indicator, autosave debounced two seconds after the last change, a disabled Save button when clean, conflict detection, and a `beforeunload` guard when dirty.
 
-**Design view:** left panel = layout blocks + content blocks palette (click-to-add always works; drag-to-position is the enhancement). Right = slide frame at fixed 1280×720 design resolution, scaled to fit via `transform: scale()`.
-> Note on req #13: rather than per-element `clamp()`, the whole slide renders at full design size and is uniformly scaled with a CSS transform. This keeps *every* size relationship pixel-accurate at any zoom — same technique Keynote/Figma use — and present mode is just the same render at scale-to-viewport. Less CSS to maintain, impossible for text contrast to drift.
+**Design view (implemented foundation):** left panel = visual layouts, structural blocks, content blocks, slide design, reusable library, and reusable media. Right = a responsive 16:9 slide boundary. Normal preview/presentation rendering clips to that boundary; editor rendering exposes overflowing blocks below it and lets the page scroll so every block remains reachable. Blocks can move within and across row/column/group containers with a ghost state and highlighted insertion line.
 
-Every block gets **always-visible chrome** (req #14): a thin outline + mini header bar (block name, drag handle, ⋮ menu: duplicate / save to library / delete, and move ▲▼ buttons). Styled subtle (borders at ~40% using `--border-default`) but never hidden. Keyboard: blocks focusable, ▲▼ move within parent, dnd-kit keyboard sensor for cross-container moves.
+Every block gets **always-visible chrome** (req #14): a thin outline + mini header bar with a drag-only region, block name, move up/down, duplicate, save to library, and delete controls. Column layouts also expose Swap Columns. Custom edge-aware tooltips can render emphasized shortcut hints later. Blocks remain focusable and visible move buttons provide the non-drag fallback.
 
-**Outline view (req #19):** same left palette; right side renders the same tree as nested labeled boxes (ROW → COLUMN → TEXT, per wireframe p.2) with plain text fields/textareas + minimal formatting toolbar (bold/italic/underline/size — no color, ever). Because both views edit the same tree, toggling is lossless.
+**Outline view (req #19, implemented foundation):** same structural/content/library/media palette; Slide Design is hidden. The right side renders the same tree as natural-height nested labeled boxes with plain content fields, media/accessibility details, drag/drop, and column swapping. All surfaces, image frames, callout color variants, and rich-text formatting controls are intentionally excluded so Outline stays focused on content and structure. Existing design data is preserved when content changes, so toggling remains lossless.
 
 **Voiceover view (req #21):** left = upload zone (mp3/m4a/wav, soft 25MB cap) + clip info + delete/replace; right = player preview exactly as it will appear on the published slide, plus the **caption cue editor**: table of rows (start / end / text), "＋ cue at playhead" button, inline validation (overlaps/ordering). This *is* the manual transcription editor (auto-transcription later feeds the same rows).
 
@@ -130,18 +152,28 @@ Every block gets **always-visible chrome** (req #14): a thin outline + mini head
 Big circular play button showing clip length → expands to transport: play/pause, back 10s, forward 10s, seekable timeline (a real `<input type=range>` — accessible by default), current/total time, CC toggle. Captions render in a live region below the slide, styled by tokens. `<audio preload="metadata">`, keyboard operable, visible focus states.
 
 ### 5.4 Library (req #20)
-Save **from** the editor: block ⋮ menu → "Save to library" (names it, snapshots the subtree); slide-level "Save slide to library" in the deck menu. Insert **into** a deck: "Library" tab in the left palette alongside Layout/Content blocks (searchable, previews). Management screen at `/library` for rename/delete/edit. Pattern follows the best-of-breed reference (Notion synced-block-style saving *from context*, Canva-style palette insertion). Library inserts are **copies** (no live-sync in v1 — flagged as future enhancement).
+Save **from** the editor: the block star action names and snapshots the subtree. Insert **into** a deck: the searchable Library palette inserts a fresh copy. `/library` currently supports search, rename, and delete; existing slide copies are unaffected by library deletion. Slide-level library items and library-item editing are still planned. Library inserts are **copies**, not live-synced instances.
 
-### 5.5 Present mode (req #3)
+### 5.5 Media library (implemented foundation)
+
+Vercel Blob stores public JPG, PNG, WebP, and GIF assets under an isolated
+`media/` prefix with a 15 MB maximum. The editor palette supports drive browse,
+file drag/drop, reuse, and deletion. Dragging an existing library asset onto an
+image block assigns the existing URL rather than re-uploading it. Clicking an
+image opens a full-screen media picker containing upload + library views, alt
+text, decorative state, optional caption, and LU SVG frame selection. Deleting
+an asset warns that existing slide references will stop rendering it.
+
+### 5.6 Present mode (req #3)
 Dead simple: full-screen slide (Fullscreen API + fallback), ← → / space / click to advance, `Esc`/`G` for **overview grid** (all slides, click to jump), slide counter, theme toggle, voiceover player if present. Same renderer as the editor frame at viewport scale. `prefers-reduced-motion` respected (no slide transitions when set). Works for internal drafts and is identical to what an emailed client sees on the public URL — zero learning curve.
 
-### 5.6 Publishing + status flow
+### 5.7 Publishing + status flow
 `draft → in_review → approved`. Approving prompts to confirm the public slug and sets `published_at`; the deck is then live at `decks.loyaltyuntapped.com/[client]/[deck]`. Un-approving (back to draft) 404s the public URL. Public pages: no auth, `noindex` robots meta (decks are for clients, not Google), OG tags with deck title + client/event branding for nice link previews in email.
 
-### 5.7 Review comments (Friday+, schema ships Thursday)
+### 5.8 Review comments (Friday+, schema ships Thursday)
 Comment affordance on each slide and on each block (via ⋮ menu) → threaded panel (parent_id threading, resolve/unresolve, author + timestamp from Clerk). Deck-level "Request review" flips status to `in_review` and surfaces a review banner to other users.
 
-### 5.8 Client personalization (Phase 2, cheap win)
+### 5.9 Client personalization (Phase 2, cheap win)
 Merge tags in text blocks — `{{client.name}}`, `{{event.name}}` — resolved at render. Makes library slides self-personalizing when dropped into any client's deck.
 
 ---
@@ -154,7 +186,7 @@ Merge tags in text blocks — `{{client.name}}`, `{{event.name}}` — resolved a
 
 ---
 
-## 7. DNS / publishing runbook (Network Solutions, manual — do this TUESDAY, not Thursday)
+## 7. DNS / publishing runbook (Network Solutions, complete before public launch)
 
 One-time setup, ~10 minutes, then publishing is fully automatic forever:
 
@@ -169,31 +201,35 @@ One-time setup, ~10 minutes, then publishing is fully automatic forever:
 
 ## 8. Pitfalls & gotchas (read before building)
 
-1. **Dropbox will fight the dev environment.** `node_modules` + `.next` = hundreds of thousands of small synced files. Mark them ignored *before* first install: `xattr -w com.dropbox.ignored 1 node_modules .next` (macOS; also add to `.gitignore`). Otherwise expect fans, sync backlog, and possible file-lock weirdness during builds.
+1. **Dropbox will fight the dev environment.** `node_modules` + `.next` = hundreds of thousands of small synced files. Mark them ignored: `xattr -w com.dropbox.ignored 1 node_modules .next` (macOS; also keep them in `.gitignore`). If startup takes minutes or a generated chunk such as `./32.js` is missing, stop Next, move `.next` to a temporary backup, and restart.
 2. **Vercel Hobby ToS** — non-commercial. Fine now; move to Pro when client-facing use is real.
 3. **Clerk public-route matcher** — a wrong middleware matcher makes published decks demand login (or worse, leaves the editor open). Test both directions logged out.
 4. **Neon cold starts** — first query after idle ~500ms. Don't chase this as a "bug" Thursday.
 5. **Audio formats** — voice memos from iPhones are `.m4a`; accept mp3/m4a/wav and store as-is (all play natively in modern browsers). Don't build transcoding.
 6. **Concurrent edits** — autosave is last-write-wins in v1. Two people editing the *same slide* can clobber each other. Mitigation shipped: `updated_at` check on save → "This slide changed since you loaded it" warning. Real-time collab is explicitly out of scope.
 7. **Layout-change data loss** — the migration/confirm dialog (§3) exists precisely because silent content loss is the fastest way to lose team trust in the tool.
-8. **DnD accessibility** — free-form canvas DnD is an a11y tarpit. The structured tree + visible move buttons means the app is *fully usable with zero drag and drop*; dnd-kit is layered on top as an enhancement. This is also the Thursday de-risk (see §9).
+8. **DnD accessibility** — free-form canvas DnD is an a11y tarpit. The structured tree + visible move buttons means core ordering works without dragging. The current native DnD layer handles pointer-based cross-container moves; a dedicated keyboard cross-container interaction remains an accessibility follow-up.
 9. **NS propagation delay** — the one task with an external clock. Front-load it.
 10. **Blob URLs are public-but-unguessable** — fine for voiceovers on decks that go public anyway; don't put anything sensitive in audio.
-11. **`transform: scale()` + TipTap** — text cursor placement inside a scaled container can feel off in some browsers. Mitigation: Design view edits text in place at ≥0.5 scale (fine), Outline view is the unscaled text-editing surface. If cursor jank appears, we point users at Outline for long typing sessions.
+11. **Never run production build and dev concurrently.** `next build` and `next dev` both write `.next`. In this Dropbox workspace, overlapping them produced a dev server that accepted TCP connections but returned no bytes, followed by missing webpack chunks. Stop dev before building; clear/move `.next` before restarting if the cache was shared.
 
 ---
 
-## 9. Timeline to Thursday EOD
+## 9. Development sequence — reconciled August 11
 
-| Day | Ship | Fallback if slipping |
+| Status | Milestone | Remaining boundary |
 |---|---|---|
-| **Mon (today)** | Plan ✅, repo scaffold, tokens + fonts + light/dark, DB schema + types, Clerk wiring, deploy skeleton to Vercel. **You:** create the 3 accounts (§1), add the NS CNAME | — |
-| **Tue** | Dashboard (grid/table/search/sort), clients + events CRUD (minimal), deck create flow, editor shell (tabs, slide strip, save states), Design view: palette, click-to-add, block chrome, move ▲▼, layouts + confirm dialog, autosave | DnD slips to Wed — click-to-add + move buttons are fully functional |
-| **Wed** | Outline view, dnd-kit layering, library (save-from-editor + insert palette + manage page), voiceover upload + player + caption editor | Library manage page slips to Thu AM (save/insert is the critical path) |
-| **Thu** | Present mode (fullscreen + overview), publish flow + public routes, seed the first real deck, a11y + both-themes pass, deploy | If present mode is tight: public route reuses it, so it's ONE renderer — cut slide transitions, not features |
-| **Fri+** | Comments/threads, full client notes panel, merge tags, in-browser recording (MediaRecorder), Whisper auto-transcription (~$0.006/min, feeds the same cue rows), R2 migration if needed, per-client subdomains after DNS move | |
+| Complete | Foundation: repo, tokens/fonts, schema, Clerk, Neon, deployment | Public DNS is still pending |
+| Complete | Dashboard, deck creation, slide persistence/management, editor shell, layouts, autosave | Client settings/CRUD beyond deck creation is still planned |
+| Complete | Nested block editor, cross-container DnD, Outline, block library, media library, slide styles, SVG themes/masks | More real-world block/template coverage is needed |
+| **Next** | Audit collected marketing decks and implement the prioritized reusable block/template set | Keep content-model additions compatible with Design, Outline, library snapshots, and future present mode |
+| After templates | Voiceover upload, player, and manual caption cues | Reuse the existing `voiceovers` schema and Vercel Blob setup |
+| MVP finish | Internal present mode, review/status flow, public approved-deck route, DNS, end-to-end accessibility pass | Reuse the same non-editor `SlideCanvas` renderer and keep public routes logged-out accessible |
+| Post-MVP | Comments, client settings, merge tags, recording/transcription, analytics, PDF export | See parking lot below |
 
-**Honest risk assessment:** the schedule is aggressive but real, *because* the three views share one renderer/tree and DnD is an enhancement rather than a foundation. The most likely Thursday casualty is polish on the caption cue editor (functional but plain). Biggest external dependency: your 15 min of account setup + the NS DNS record — both needed by Tuesday.
+The original Thursday target remains aggressive. Protect the shared renderer and
+data model first; reduce transition polish before cutting content accessibility,
+safe saves, or public-route protections.
 
 ---
 

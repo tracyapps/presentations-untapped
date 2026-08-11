@@ -1,5 +1,6 @@
 import { list } from "@vercel/blob";
 import policy from "@/lib/media-policy.json";
+import { getMediaBlobToken } from "@/lib/media-storage";
 
 export type MediaAsset = {
   url: string;
@@ -17,7 +18,7 @@ export type MediaLibraryData = {
 };
 
 function filename(pathname: string): string {
-  const leaf = (pathname.split("/").at(-1) ?? pathname).replace(/^[0-9a-f-]{36}--/i, "");
+  const leaf = (pathname.split("/").at(-1) ?? pathname).replace(/^(?:[0-9a-f-]{36}--)+/i, "");
   try {
     return decodeURIComponent(leaf);
   } catch {
@@ -26,13 +27,14 @@ function filename(pathname: string): string {
 }
 
 export async function getMediaLibrary(): Promise<MediaLibraryData> {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return { configured: false, items: [] };
+  const token = getMediaBlobToken();
+  if (!token) return { configured: false, items: [] };
 
   try {
     const items: MediaAsset[] = [];
     let cursor: string | undefined;
     do {
-      const page = await list({ prefix: policy.prefix, limit: 1000, cursor });
+      const page = await list({ prefix: policy.prefix, limit: 1000, cursor, token });
       items.push(...page.blobs.map((blob) => ({
         url: blob.url,
         pathname: blob.pathname,

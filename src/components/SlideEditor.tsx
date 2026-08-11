@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { BlockDropZone, isActiveTarget, type BlockDndController, type BlockDropTarget, useBlockDnd } from "@/components/BlockDnd";
 import {
@@ -10,14 +10,16 @@ import {
 } from "@/app/decks/[id]/edit/actions";
 import SlideCanvas from "@/components/SlideCanvas";
 import MediaLibraryPanel from "@/components/MediaLibraryPanel";
+import MediaLibraryModal from "@/components/MediaLibraryModal";
 import type { EditorDeck, EditorSlide } from "@/lib/data/editor";
 import type { LibraryBlockItem } from "@/lib/data/library";
 import type { MediaAsset, MediaLibraryData } from "@/lib/data/media";
+import { hasMediaDrag, readMediaDrag } from "@/lib/media-dnd";
 import { LAYOUTS, migrateToLayout } from "@/lib/slides/layouts";
-import { appendContent, cloneNode, createContentNode, deleteNode, duplicateNode, moveNode, moveNodeTo } from "@/lib/slides/editor";
-import { IMAGE_FRAMES, PATTERNS, SURFACES, type ImageFrameKey, type SlidePatternChoice, type SurfaceChoice } from "@/lib/slides/styles";
-import type { ContentNode, ContentType, Node, RichText } from "@/lib/slides/types";
-import { isLayout } from "@/lib/slides/types";
+import { appendContent, appendLayout, cloneNode, createContentNode, deleteNode, duplicateNode, moveNode, moveNodeTo, swapLayoutChildren } from "@/lib/slides/editor";
+import { PATTERNS, SURFACES, type SlidePatternChoice, type SurfaceChoice } from "@/lib/slides/styles";
+import type { ContentNode, ContentProps, ContentType, LayoutNode, LayoutType, Node, RichText } from "@/lib/slides/types";
+import { findNode, isLayout } from "@/lib/slides/types";
 
 type Tab = "design" | "outline" | "voiceover";
 type SaveState = "saved" | "dirty" | "saving" | "conflict" | "error";
@@ -42,6 +44,12 @@ const CONTENT_PALETTE: Array<{ type: ContentType; label: string }> = [
   { type: "chart", label: "Chart" },
 ];
 
+const STRUCTURE_PALETTE: Array<{ type: LayoutType; label: string }> = [
+  { type: "row", label: "Row" },
+  { type: "columns", label: "Columns" },
+  { type: "group", label: "Group" },
+];
+
 function isTextNode(node: ContentNode): node is TextNode {
   return ["title", "tagline", "blockquote", "callout", "paragraph"].includes(node.type);
 }
@@ -50,14 +58,6 @@ function replaceNode(nodes: Node[], id: string, update: (node: ContentNode) => C
   return nodes.map((node) => {
     if (node.id === id && !isLayout(node)) return update(node);
     if (isLayout(node)) return { ...node, children: replaceNode(node.children, id, update) };
-    return node;
-  });
-}
-
-function replaceAnyNode(nodes: Node[], id: string, update: (node: Node) => Node): Node[] {
-  return nodes.map((node) => {
-    if (node.id === id) return update(node);
-    if (isLayout(node)) return { ...node, children: replaceAnyNode(node.children, id, update) };
     return node;
   });
 }
@@ -84,6 +84,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   const [libraryNotice, setLibraryNotice] = useState("");
   const [libraryTarget, setLibraryTarget] = useState<Node | null>(null);
   const [libraryName, setLibraryName] = useState("");
+  const [mediaTargetId, setMediaTargetId] = useState<string | null>(null);
   const [isAdding, startAdding] = useTransition();
   const [isSavingLibrary, startSavingLibrary] = useTransition();
   const docRef = useRef(doc);
@@ -93,6 +94,12 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     () => layoutKey !== savedLayoutKey || JSON.stringify(doc) !== JSON.stringify(savedDoc),
     [doc, layoutKey, savedDoc, savedLayoutKey],
   );
+  const mediaTarget = useMemo(() => {
+    if (!mediaTargetId) return null;
+    const node = findNode(doc, mediaTargetId);
+    return node && !isLayout(node) && node.type === "image" ? node : null;
+  }, [doc, mediaTargetId]);
+  const closeMediaModal = useCallback(() => setMediaTargetId(null), []);
 
   useEffect(() => { docRef.current = doc; }, [doc]);
   useEffect(() => { layoutRef.current = layoutKey; }, [layoutKey]);
@@ -198,20 +205,6 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     setDoc((current) => ({ ...current, blocks: replaceNode(current.blocks, id, update) }));
   }
 
-  function updateNodeSurface(id: string, surface: SurfaceChoice) {
-    if (saveState !== "conflict") {
-      setSaveState("dirty");
-      setMessage("");
-    }
-    setDoc((current) => ({
-      ...current,
-      blocks: replaceAnyNode(current.blocks, id, (node) => ({
-        ...node,
-        style: surface === "inherit" ? undefined : { ...node.style, surface },
-      }) as Node),
-    }));
-  }
-
   function updateSlideDesign(update: { surface?: SurfaceChoice; pattern?: SlidePatternChoice }) {
     if (saveState !== "conflict") {
       setSaveState("dirty");
@@ -235,6 +228,10 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
 
   function addBlock(type: ContentType) {
     markDoc(appendContent(docRef.current, type));
+  }
+
+  function addLayoutBlock(type: LayoutType) {
+    markDoc(appendLayout(docRef.current, type));
   }
 
   function changeLayout(targetKey: string) {
@@ -295,6 +292,40 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
 
   function registerMedia(asset: MediaAsset) {
     setMediaItems((current) => [asset, ...current.filter((item) => item.url !== asset.url)]);
+  }
+
+  function assignMediaToImage(id: string, asset: MediaAsset) {
+    updateNode(id, (current) => current.type === "image" ? {
+      ...current,
+      props: {
+        ...current.props,
+        src: asset.url,
+        alt: current.props.alt || asset.name.replace(/\.[^.]+$/, "").replaceAll("-", " "),
+      },
+    } : current);
+  }
+
+  async function deleteMediaAsset(asset: MediaAsset) {
+    if (!window.confirm(`Delete “${asset.name}” from the media library? Existing slides using it will stop displaying the image. This cannot be undone.`)) {
+      return false;
+    }
+    const response = await fetch("/api/media", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pathname: asset.pathname }),
+    });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) throw new Error(result.error ?? "The image could not be deleted.");
+    setMediaItems((current) => current.filter((item) => item.url !== asset.url));
+    return true;
+  }
+
+  function applyImageProps(id: string, props: ContentProps["image"]) {
+    updateNode(id, (current) => current.type === "image" ? { ...current, props } : current);
+  }
+
+  function swapColumns(node: LayoutNode) {
+    markDoc(swapLayoutChildren(docRef.current, node.id));
   }
 
   function addImageFromMedia(asset: MediaAsset) {
@@ -445,6 +476,11 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
                 <PatternSwatches value={doc.style?.pattern ?? "none"} onChange={(pattern) => updateSlideDesign({ pattern })} />
               </PaletteSectionPanel>}
               <PaletteSectionPanel id="content" label="Content" open={paletteState.content} onToggle={() => togglePaletteSection("content")}>
+                <p className="palette-subheading">Structure</p>
+                <div className="content-palette structure-palette">
+                  {STRUCTURE_PALETTE.map((item) => <button type="button" onClick={() => addLayoutBlock(item.type)} key={item.type}>{item.label}</button>)}
+                </div>
+                <p className="palette-subheading">Blocks</p>
                 <div className="content-palette">
                   {CONTENT_PALETTE.map((item) => <button type="button" onClick={() => addBlock(item.type)} key={item.type}>{item.label}</button>)}
                 </div>
@@ -462,7 +498,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
               </PaletteSectionPanel>
               <PaletteSectionPanel id="media" label="Media" count={mediaItems.length} open={paletteState.media} onToggle={() => togglePaletteSection("media")}>
                 <p className="palette-help">Upload once, then reuse the image in any deck.</p>
-                <MediaLibraryPanel items={mediaItems} configured={mediaLibrary.configured} loadError={mediaLibrary.error} onUploaded={registerMedia} onSelect={addImageFromMedia} />
+                <MediaLibraryPanel items={mediaItems} configured={mediaLibrary.configured} loadError={mediaLibrary.error} onUploaded={registerMedia} onSelect={addImageFromMedia} onDelete={deleteMediaAsset} />
               </PaletteSectionPanel>
             </>
           )}
@@ -476,8 +512,11 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             onMove: (node, direction) => markDoc(moveNode(docRef.current, node.id, direction)),
             onDrop: dropBlock,
             onSaveToLibrary: openLibraryDialog,
+            onEditImage: (node) => setMediaTargetId(node.id),
+            onAssignMedia: assignMediaToImage,
+            onSwapColumns: swapColumns,
           }} /></div>}
-          {tab === "outline" && <div className="outline-workspace"><OutlineTree nodes={doc.blocks} media={{ items: mediaItems, configured: mediaLibrary.configured, error: mediaLibrary.error, onUploaded: registerMedia }} onText={updateText} onUpdate={updateNode} onSurface={updateNodeSurface} onMove={dropBlock} /></div>}
+          {tab === "outline" && <div className="outline-workspace"><OutlineTree nodes={doc.blocks} media={{ items: mediaItems, onOpen: setMediaTargetId, onAssign: assignMediaToImage }} onText={updateText} onUpdate={updateNode} onMove={dropBlock} onSwapColumns={(id) => markDoc(swapLayoutChildren(docRef.current, id))} /></div>}
           {tab === "voiceover" && <div className="voiceover-empty"><p className="eyebrow">Voiceover</p><h2>Add narration after the editing foundation is complete</h2><p>The player, audio upload, and caption cue editor are the following roadmap milestone.</p></div>}
         </section>
       </div>
@@ -507,6 +546,16 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
           </section>
         </div>
       )}
+      <MediaLibraryModal
+        image={mediaTarget}
+        items={mediaItems}
+        configured={mediaLibrary.configured}
+        loadError={mediaLibrary.error}
+        onClose={closeMediaModal}
+        onUploaded={registerMedia}
+        onDelete={deleteMediaAsset}
+        onApply={applyImageProps}
+      />
     </main>
   );
 }
@@ -545,66 +594,57 @@ function PatternSwatches({ value, onChange }: { value: SlidePatternChoice; onCha
   </div>;
 }
 
-function NodeSurfaceControl({ node, onSurface }: { node: Node; onSurface: (id: string, surface: SurfaceChoice) => void }) {
-  return <label className="node-surface-control">Surface<select value={node.style?.surface ?? "inherit"} onChange={(event) => onSurface(node.id, event.target.value as SurfaceChoice)}><option value="inherit">Inherit from parent</option>{SURFACES.map((surface) => <option value={surface.key} key={surface.key}>{surface.label}</option>)}</select></label>;
-}
+type OutlineMedia = { items: MediaAsset[]; onOpen: (id: string) => void; onAssign: (id: string, asset: MediaAsset) => void };
 
-function ImageFramePicker({ value, onChange }: { value?: ImageFrameKey; onChange: (frame?: ImageFrameKey) => void }) {
-  return <fieldset className="frame-picker"><legend>Image frame</legend><div>
-    <button type="button" className={!value ? "is-selected" : ""} aria-pressed={!value} onClick={() => onChange(undefined)}><span className="frame-none">None</span></button>
-    {IMAGE_FRAMES.map((frame) => <button type="button" className={value === frame.key ? "is-selected" : ""} aria-pressed={value === frame.key} title={frame.label} onClick={() => onChange(frame.key)} key={frame.key}><span style={{ WebkitMaskImage: `url("${frame.asset}")`, maskImage: `url("${frame.asset}")` }} /></button>)}
-  </div></fieldset>;
-}
-
-type OutlineMedia = { items: MediaAsset[]; configured: boolean; error?: string; onUploaded: (asset: MediaAsset) => void };
-
-function OutlineTree({ nodes, media, onText, onUpdate, onSurface, onMove }: { nodes: Node[]; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSurface: (id: string, surface: SurfaceChoice) => void; onMove: (sourceId: string, target: BlockDropTarget) => void }) {
+function OutlineTree({ nodes, media, onText, onUpdate, onMove, onSwapColumns }: { nodes: Node[]; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onMove: (sourceId: string, target: BlockDropTarget) => void; onSwapColumns: (id: string) => void }) {
   const dnd = useBlockDnd(onMove);
-  return <OutlineNodes nodes={nodes} parentId={null} media={media} onText={onText} onUpdate={onUpdate} onSurface={onSurface} dnd={dnd} />;
+  return <OutlineNodes nodes={nodes} parentId={null} media={media} onText={onText} onUpdate={onUpdate} onSwapColumns={onSwapColumns} dnd={dnd} />;
 }
 
-function OutlineNodes({ nodes, parentId, media, onText, onUpdate, onSurface, dnd }: { nodes: Node[]; parentId: string | null; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSurface: (id: string, surface: SurfaceChoice) => void; dnd: BlockDndController }) {
+function OutlineNodes({ nodes, parentId, media, onText, onUpdate, onSwapColumns, dnd }: { nodes: Node[]; parentId: string | null; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSwapColumns: (id: string) => void; dnd: BlockDndController }) {
   if (!nodes.length) return <div className="outline-nodes is-empty-drop-container"><BlockDropZone axis="vertical" controller={dnd} target={{ parentId, index: 0 }} /></div>;
   return <div className="outline-nodes">{nodes.map((node, index) => {
     const before = { parentId, index };
     const after = { parentId, index: index + 1 };
     return <div className={`outline-node-slot${isActiveTarget(dnd, before) ? " is-target-before" : ""}${index === nodes.length - 1 && isActiveTarget(dnd, after) ? " is-target-after" : ""}`} key={node.id}>
       <BlockDropZone axis="vertical" controller={dnd} target={before} />
-      <OutlineNode node={node} media={media} onText={onText} onUpdate={onUpdate} onSurface={onSurface} dnd={dnd} />
+      <OutlineNode node={node} media={media} onText={onText} onUpdate={onUpdate} onSwapColumns={onSwapColumns} dnd={dnd} />
       {index === nodes.length - 1 && <BlockDropZone axis="vertical" controller={dnd} target={after} />}
     </div>;
   })}</div>;
 }
 
-function OutlineDragHeader({ node, dnd }: { node: Node; dnd: BlockDndController }) {
+function OutlineDragHeader({ node, dnd, onSwapColumns }: { node: Node; dnd: BlockDndController; onSwapColumns?: (id: string) => void }) {
   return <header
     className="outline-block-header"
     draggable
-    onDragStart={(event) => dnd.start(event, node.id, event.currentTarget.closest(".outline-block, .outline-layout"))}
+    onDragStart={(event) => {
+      if ((event.target as HTMLElement).closest("button")) { event.preventDefault(); return; }
+      dnd.start(event, node.id, event.currentTarget.closest(".outline-block, .outline-layout"));
+    }}
     onDragEnd={() => dnd.finish()}
   >
     <span className="outline-drag-handle" aria-hidden="true">⠿</span>
     <h3>{node.type}</h3>
+    {isLayout(node) && node.type === "columns" && node.children.length > 1 && onSwapColumns && <button type="button" onClick={() => onSwapColumns(node.id)}>⇄ Swap columns</button>}
   </header>;
 }
 
-function OutlineNode({ node, media, onText, onUpdate, onSurface, dnd }: { node: Node; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSurface: (id: string, surface: SurfaceChoice) => void; dnd: BlockDndController }) {
+function OutlineNode({ node, media, onText, onUpdate, onSwapColumns, dnd }: { node: Node; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSwapColumns: (id: string) => void; dnd: BlockDndController }) {
   if (isLayout(node)) {
-    return <section className={`outline-layout${dnd.draggingId === node.id ? " is-dragging" : ""}`} aria-label={`${node.type} layout`}><OutlineDragHeader node={node} dnd={dnd} /><NodeSurfaceControl node={node} onSurface={onSurface} /><OutlineNodes nodes={node.children} parentId={node.id} media={media} onText={onText} onUpdate={onUpdate} onSurface={onSurface} dnd={dnd} /></section>;
+    return <section className={`outline-layout${dnd.draggingId === node.id ? " is-dragging" : ""}`} aria-label={`${node.type} layout`}><OutlineDragHeader node={node} dnd={dnd} onSwapColumns={onSwapColumns} /><OutlineNodes nodes={node.children} parentId={node.id} media={media} onText={onText} onUpdate={onUpdate} onSwapColumns={onSwapColumns} dnd={dnd} /></section>;
   }
   return (
     <section className={`outline-block${dnd.draggingId === node.id ? " is-dragging" : ""}`}>
       <OutlineDragHeader node={node} dnd={dnd} />
-      <NodeSurfaceControl node={node} onSurface={onSurface} />
-      {isTextNode(node) && <RichTextEditor node={node} onText={onText} onUpdate={onUpdate} />}
+      {isTextNode(node) && <RichTextEditor node={node} onText={onText} />}
       {node.type === "blockquote" && <Field label="Attribution" value={node.props.attribution ?? ""} onChange={(value) => onUpdate(node.id, (current) => current.type === "blockquote" ? { ...current, props: { ...current.props, attribution: value } } : current)} />}
-      {node.type === "callout" && <label>Style<select value={node.props.variant} onChange={(event) => onUpdate(node.id, (current) => current.type === "callout" ? { ...current, props: { ...current.props, variant: event.target.value as "accent" | "teal" | "blue" } } : current)}><option value="accent">Accent</option><option value="teal">Teal</option><option value="blue">Blue</option></select></label>}
       {node.type === "image" && <>
-        <MediaLibraryPanel items={media.items} configured={media.configured} loadError={media.error} selectedUrl={node.props.src} onUploaded={media.onUploaded} onSelect={(asset) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, src: asset.url, alt: current.props.alt || asset.name.replace(/\.[^.]+$/, "").replaceAll("-", " ") } } : current)} />
+        <OutlineImagePicker node={node} media={media} />
         <Field label="Image URL" hint="Or paste a hosted image URL" value={node.props.src} onChange={(value) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, src: value } } : current)} />
         <Field label="Alt text" value={node.props.alt} disabled={node.props.decorative} onChange={(value) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, alt: value } } : current)} />
+        <Field label="Caption" value={node.props.caption ?? ""} onChange={(value) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, caption: value } } : current)} />
         <Check label="Decorative image" checked={node.props.decorative ?? false} onChange={(checked) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, decorative: checked } } : current)} />
-        <ImageFramePicker value={node.props.frame} onChange={(frame) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, frame } } : current)} />
       </>}
       {node.type === "list" && <>
         <Check label="Numbered list" checked={node.props.ordered} onChange={(checked) => onUpdate(node.id, (current) => current.type === "list" ? { ...current, props: { ...current.props, ordered: checked } } : current)} />
@@ -629,25 +669,36 @@ function OutlineNode({ node, media, onText, onUpdate, onSurface, dnd }: { node: 
   );
 }
 
-function RichTextEditor({ node, onText, onUpdate }: { node: TextNode; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void }) {
-  const marks = node.props.text[0] ?? { text: "" };
-  const setMark = (mark: "bold" | "italic" | "underline", value: boolean) => onUpdate(node.id, (current) => {
-    if (!isTextNode(current)) return current;
-    return { ...current, props: { ...current.props, text: current.props.text.map((part) => ({ ...part, [mark]: value || undefined })) } } as ContentNode;
-  });
-  return <>
-    <div className="rich-toolbar" aria-label={`Format ${node.type}`}>
-      <button type="button" aria-pressed={marks.bold ?? false} onClick={() => setMark("bold", !marks.bold)}><strong>B</strong></button>
-      <button type="button" aria-pressed={marks.italic ?? false} onClick={() => setMark("italic", !marks.italic)}><em>I</em></button>
-      <button type="button" aria-pressed={marks.underline ?? false} onClick={() => setMark("underline", !marks.underline)}><u>U</u></button>
-      <label>Size<select value={marks.size ?? "md"} onChange={(event) => onUpdate(node.id, (current) => {
-        if (!isTextNode(current)) return current;
-        const size = event.target.value as "sm" | "md" | "lg";
-        return { ...current, props: { ...current.props, text: current.props.text.map((part) => ({ ...part, size })) } } as ContentNode;
-      })}><option value="sm">Small</option><option value="md">Medium</option><option value="lg">Large</option></select></label>
-    </div>
-    <textarea value={plainText(node.props.text)} onChange={(event) => onText(node.id, event.target.value)} rows={node.type === "title" ? 2 : 4} aria-label={`${node.type} text`} />
-  </>;
+function OutlineImagePicker({ node, media }: { node: Extract<ContentNode, { type: "image" }>; media: OutlineMedia }) {
+  const [draggingOver, setDraggingOver] = useState(false);
+  const selectedAsset = media.items.find((item) => item.url === node.props.src);
+  return <button
+    type="button"
+    className={`outline-image-picker${draggingOver ? " is-dragging" : ""}`}
+    onClick={() => media.onOpen(node.id)}
+    onDragEnter={(event) => { if (hasMediaDrag(event.dataTransfer)) { event.preventDefault(); setDraggingOver(true); } }}
+    onDragOver={(event) => { if (hasMediaDrag(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } }}
+    onDragLeave={(event) => { if (!(event.relatedTarget instanceof HTMLElement) || !event.currentTarget.contains(event.relatedTarget)) setDraggingOver(false); }}
+    onDrop={(event) => {
+      const asset = readMediaDrag(event.dataTransfer);
+      if (!asset) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setDraggingOver(false);
+      media.onAssign(node.id, asset);
+    }}
+  >
+    {node.props.src ? <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={node.props.src} alt="" />
+    </> : <span className="outline-image-empty">Image</span>}
+    <strong>{selectedAsset?.name ?? (node.props.src ? "Hosted image" : "Choose an image")}</strong>
+    <small>Click to open media library · or drop existing media here</small>
+  </button>;
+}
+
+function RichTextEditor({ node, onText }: { node: TextNode; onText: (id: string, text: string) => void }) {
+  return <textarea value={plainText(node.props.text)} onChange={(event) => onText(node.id, event.target.value)} rows={node.type === "title" ? 2 : 4} aria-label={`${node.type} text`} />;
 }
 
 function Field({ label, value, onChange, hint, disabled = false }: { label: string; value: string; onChange: (value: string) => void; hint?: string; disabled?: boolean }) {

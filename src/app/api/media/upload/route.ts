@@ -2,17 +2,20 @@ import { auth } from "@clerk/nextjs/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
 import policy from "@/lib/media-policy.json";
+import { getMediaBlobToken } from "@/lib/media-storage";
 
 export async function POST(request: Request): Promise<NextResponse> {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: "Sign in to upload media." }, { status: 401 });
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  const token = getMediaBlobToken();
+  if (!token) {
     return NextResponse.json({ error: "Vercel Blob is not configured." }, { status: 503 });
   }
 
   try {
     const body = await request.json() as HandleUploadBody;
     const response = await handleUpload({
+      token,
       request,
       body,
       onBeforeGenerateToken: async (pathname) => {
