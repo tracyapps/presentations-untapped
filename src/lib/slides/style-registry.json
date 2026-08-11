@@ -1,0 +1,84 @@
+{
+  "surfaces": [
+    {
+      "key": "neutral",
+      "label": "Paper",
+      "description": "Warm paper by day, charcoal by night.",
+      "light": { "background": "#f9f2ea", "foreground": "#262626", "muted": "#5f554c", "accent": "#9e3900" },
+      "dark": { "background": "#191919", "foreground": "#f9f2ea", "muted": "#d8cec3", "accent": "#f28a0f" }
+    },
+    {
+      "key": "warm",
+      "label": "Warm",
+      "description": "Blush in light mode, cocoa in dark mode.",
+      "light": { "background": "#fde9df", "foreground": "#262626", "muted": "#635249", "accent": "#a83b00" },
+      "dark": { "background": "#4a2418", "foreground": "#f9f2ea", "muted": "#e3d4ca", "accent": "#f7a23b" }
+    },
+    {
+      "key": "evergreen",
+      "label": "Evergreen",
+      "description": "Mint in light mode, deep forest in dark mode.",
+      "light": { "background": "#d8f1ed", "foreground": "#262626", "muted": "#4d5c59", "accent": "#9e3900" },
+      "dark": { "background": "#003b32", "foreground": "#f9f2ea", "muted": "#c7ded8", "accent": "#f28a0f" }
+    },
+    {
+      "key": "orange",
+      "label": "LU Orange",
+      "description": "Primary orange in light mode, maroon in dark mode.",
+      "light": { "background": "#c04402", "foreground": "#ffffff", "muted": "#f9f2ea", "accent": "#ffffff" },
+      "dark": { "background": "#801205", "foreground": "#f9f2ea", "muted": "#f0cfc8", "accent": "#fcc40a" }
+    }
+  ],
+  "patterns": [
+    {
+      "key": "waves",
+      "label": "Waves",
+      "asset": "/slide-backgrounds/waves.svg",
+      "foreground": "#fff8f2",
+      "muted": "#f9f2ea",
+      "accent": "#fff8f2",
+      "scrim": "#000000",
+      "scrimOpacity": 0.55
+    },
+    {
+      "key": "blobs",
+      "label": "Blobs",
+      "asset": "/slide-backgrounds/blobs.svg",
+      "foreground": "#fff8f2",
+      "muted": "#f9f2ea",
+      "accent": "#fff8f2",
+      "scrim": "#000000",
+      "scrimOpacity": 0.55
+    },
+    {
+      "key": "bubbles",
+      "label": "Bubbles",
+      "asset": "/slide-backgrounds/bubbles.svg",
+      "foreground": "#fff8f2",
+      "muted": "#f9f2ea",
+      "accent": "#fff8f2",
+      "scrim": "#000000",
+      "scrimOpacity": 0.55
+    }
+  ],
+  "frames": [
+    { "key": "squircle", "label": "Squircle", "asset": "/frames/squircle.svg" },
+    { "key": "pebble", "label": "Pebble", "asset": "/frames/pebble.svg" },
+    { "key": "petal", "label": "Petal", "asset": "/frames/petal.svg" },
+    { "key": "splat", "label": "Splat", "asset": "/frames/splat.svg" },
+    { "key": "blob", "label": "Blob", "asset": "/frames/blob.svg" },
+    { "key": "logomark", "label": "LU Mark", "asset": "/frames/lu-logomark-mask.svg" },
+    { "key": "detail-01", "label": "Detail 01", "asset": "/frames/LU-mask-detail-01.svg" },
+    { "key": "detail-02", "label": "Detail 02", "asset": "/frames/LU-mask-detail-02.svg" },
+    { "key": "detail-03", "label": "Detail 03", "asset": "/frames/LU-mask-detail-03-new.svg" },
+    { "key": "detail-03-original", "label": "Detail 03 original", "asset": "/frames/LU-mask-detail-03.svg" },
+    { "key": "detail-04", "label": "Detail 04", "asset": "/frames/LU-mask-detail-04.svg" },
+    { "key": "detail-05", "label": "Detail 05", "asset": "/frames/LU-mask-detail-05.svg" },
+    { "key": "horizontal-complex", "label": "Horizontal complex", "asset": "/frames/LU-mask-horizontal-complex-updated.svg" },
+    { "key": "horizontal-complex-original", "label": "Horizontal complex original", "asset": "/frames/LU-mask-horizontal-complex.svg" },
+    { "key": "horizontal-large", "label": "Horizontal large", "asset": "/frames/LU-mask-horizontal-large.svg" },
+    { "key": "horizontal-large-inverse", "label": "Horizontal inverse", "asset": "/frames/LU-mask-horizontal-large-inverse-01.svg" },
+    { "key": "horizontal-wide", "label": "Horizontal wide", "asset": "/frames/LU-mask-horizontal-wide.svg" },
+    { "key": "round-bottom", "label": "Round bottom", "asset": "/frames/LU-mask-round-bottom-crop.svg" }
+  ]
+}

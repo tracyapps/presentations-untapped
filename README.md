@@ -14,6 +14,7 @@ See PLAN.md for the full technical plan, pitfalls, and timeline.
 - [x] Content palette, visible block controls, safe layouts, and basic slide management
 - [x] Block-specific property editors, rich-text toolbar, and drag-and-drop
 - [x] Save reusable block snapshots from the editor chrome
+- [x] Contrast-tested slide/block surfaces, fixed SVG themes, and LU image masks
 - [ ] Library palette insertion and management screen
 - [ ] Block templates informed by real marketing decks (next milestone)
 - [ ] Vercel Blob token and voiceover upload

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "test:styles": "node scripts/check-slide-styles.mjs",
     "start": "next start",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push"

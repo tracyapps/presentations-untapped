@@ -12,6 +12,7 @@ import SlideCanvas from "@/components/SlideCanvas";
 import type { EditorDeck, EditorSlide } from "@/lib/data/editor";
 import { LAYOUTS, migrateToLayout } from "@/lib/slides/layouts";
 import { appendContent, deleteNode, duplicateNode, moveNode, moveNodeTo } from "@/lib/slides/editor";
+import { IMAGE_FRAMES, PATTERNS, SURFACES, type ImageFrameKey, type SlidePatternChoice, type SurfaceChoice } from "@/lib/slides/styles";
 import type { ContentNode, ContentType, Node, RichText } from "@/lib/slides/types";
 import { isLayout } from "@/lib/slides/types";
 
@@ -40,6 +41,14 @@ function replaceNode(nodes: Node[], id: string, update: (node: ContentNode) => C
   });
 }
 
+function replaceAnyNode(nodes: Node[], id: string, update: (node: Node) => Node): Node[] {
+  return nodes.map((node) => {
+    if (node.id === id) return update(node);
+    if (isLayout(node)) return { ...node, children: replaceAnyNode(node.children, id, update) };
+    return node;
+  });
+}
+
 function plainText(value: RichText): string {
   return value.map((part) => part.text).join("");
 }
@@ -47,6 +56,7 @@ function plainText(value: RichText): string {
 export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; initialSlide: EditorSlide }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("design");
+  const [previewTheme, setPreviewTheme] = useState<"light" | "dark">(deck.themeDefault);
   const [doc, setDoc] = useState(initialSlide.blocks);
   const [savedDoc, setSavedDoc] = useState(initialSlide.blocks);
   const [layoutKey, setLayoutKey] = useState(initialSlide.layoutKey);
@@ -148,6 +158,33 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
       setMessage("");
     }
     setDoc((current) => ({ ...current, blocks: replaceNode(current.blocks, id, update) }));
+  }
+
+  function updateNodeSurface(id: string, surface: SurfaceChoice) {
+    if (saveState !== "conflict") {
+      setSaveState("dirty");
+      setMessage("");
+    }
+    setDoc((current) => ({
+      ...current,
+      blocks: replaceAnyNode(current.blocks, id, (node) => ({
+        ...node,
+        style: surface === "inherit" ? undefined : { ...node.style, surface },
+      }) as Node),
+    }));
+  }
+
+  function updateSlideDesign(update: { surface?: SurfaceChoice; pattern?: SlidePatternChoice }) {
+    if (saveState !== "conflict") {
+      setSaveState("dirty");
+      setMessage("");
+    }
+    setDoc((current) => {
+      const style = { ...current.style, ...update };
+      if (!style.surface || style.surface === "inherit") delete style.surface;
+      if (!style.pattern || style.pattern === "none") delete style.pattern;
+      return { ...current, style: Object.keys(style).length ? style : undefined };
+    });
   }
 
   function markDoc(next: ReturnType<typeof appendContent>) {
@@ -344,6 +381,17 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
                 </div>
               </section>
               <section>
+                <h2>Slide design</h2>
+                <p className="palette-help">Surface colors respond to the deck mode. SVG art uses a fixed, contrast-safe foreground.</p>
+                <div className="preview-theme-toggle" role="group" aria-label="Preview color mode">
+                  <span>Preview</span>
+                  <button type="button" aria-pressed={previewTheme === "light"} onClick={() => setPreviewTheme("light")}>Light</button>
+                  <button type="button" aria-pressed={previewTheme === "dark"} onClick={() => setPreviewTheme("dark")}>Dark</button>
+                </div>
+                <SurfaceSwatches value={doc.style?.surface ?? "inherit"} theme={previewTheme} includeInherit onChange={(surface) => updateSlideDesign({ surface })} />
+                <PatternSwatches value={doc.style?.pattern ?? "none"} onChange={(pattern) => updateSlideDesign({ pattern })} />
+              </section>
+              <section>
                 <h2>Content</h2>
                 <div className="content-palette">
                   {CONTENT_PALETTE.map((item) => <button type="button" onClick={() => addBlock(item.type)} key={item.type}>{item.label}</button>)}
@@ -354,15 +402,15 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
         </aside>
 
         <section className="editor-workspace">
-          <div className="editor-context"><span>Editing slide {initialSlide.position} of {deck.slides.length}</span><span>{layoutKey.replaceAll("-", " ")}</span></div>
-          {tab === "design" && <div className="design-workspace"><SlideCanvas doc={doc} theme={deck.themeDefault} editor={{
+          <div className="editor-context"><span>Editing slide {initialSlide.position} of {deck.slides.length}</span><span>{layoutKey.replaceAll("-", " ")} · {previewTheme} preview</span></div>
+          {tab === "design" && <div className="design-workspace"><SlideCanvas doc={doc} theme={previewTheme} editor={{
             onDelete: removeBlock,
             onDuplicate: (node) => markDoc(duplicateNode(docRef.current, node.id)),
             onMove: (node, direction) => markDoc(moveNode(docRef.current, node.id, direction)),
             onDrop: dropBlock,
             onSaveToLibrary: openLibraryDialog,
           }} /></div>}
-          {tab === "outline" && <div className="outline-workspace"><OutlineTree nodes={doc.blocks} onText={updateText} onUpdate={updateNode} onMove={dropBlock} /></div>}
+          {tab === "outline" && <div className="outline-workspace"><OutlineTree nodes={doc.blocks} onText={updateText} onUpdate={updateNode} onSurface={updateNodeSurface} onMove={dropBlock} /></div>}
           {tab === "voiceover" && <div className="voiceover-empty"><p className="eyebrow">Voiceover</p><h2>Add narration after the editing foundation is complete</h2><p>The player, audio upload, and caption cue editor are the following roadmap milestone.</p></div>}
         </section>
       </div>
@@ -403,19 +451,49 @@ function MiniNode({ node }: { node: Node }) {
   return <small>{node.type}</small>;
 }
 
-function OutlineTree({ nodes, onText, onUpdate, onMove }: { nodes: Node[]; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onMove: (sourceId: string, target: BlockDropTarget) => void }) {
-  const dnd = useBlockDnd(onMove);
-  return <OutlineNodes nodes={nodes} parentId={null} onText={onText} onUpdate={onUpdate} dnd={dnd} />;
+function SurfaceSwatches({ value, theme, includeInherit = false, onChange }: { value: SurfaceChoice; theme: "light" | "dark"; includeInherit?: boolean; onChange: (surface: SurfaceChoice) => void }) {
+  return <div className="surface-swatches" aria-label="Surface color combination">
+    {includeInherit && <button type="button" className={value === "inherit" ? "is-selected" : ""} onClick={() => onChange("inherit")}><span className="surface-inherit">Auto</span><strong>Deck</strong></button>}
+    {SURFACES.map((surface) => {
+      const colors = surface[theme];
+      return <button type="button" className={value === surface.key ? "is-selected" : ""} aria-pressed={value === surface.key} title={surface.description} onClick={() => onChange(surface.key)} key={surface.key}>
+        <span style={{ background: colors.background, color: colors.foreground }}><i style={{ background: colors.accent }} /></span><strong>{surface.label}</strong>
+      </button>;
+    })}
+  </div>;
 }
 
-function OutlineNodes({ nodes, parentId, onText, onUpdate, dnd }: { nodes: Node[]; parentId: string | null; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; dnd: BlockDndController }) {
+function PatternSwatches({ value, onChange }: { value: SlidePatternChoice; onChange: (pattern: SlidePatternChoice) => void }) {
+  return <div className="pattern-swatches" aria-label="SVG slide background">
+    <button type="button" className={value === "none" ? "is-selected" : ""} aria-pressed={value === "none"} onClick={() => onChange("none")}><span>None</span></button>
+    {PATTERNS.map((pattern) => <button type="button" className={value === pattern.key ? "is-selected" : ""} aria-pressed={value === pattern.key} onClick={() => onChange(pattern.key)} key={pattern.key}><span style={{ backgroundImage: `url("${pattern.asset}")` }} /><strong>{pattern.label}</strong></button>)}
+  </div>;
+}
+
+function NodeSurfaceControl({ node, onSurface }: { node: Node; onSurface: (id: string, surface: SurfaceChoice) => void }) {
+  return <label className="node-surface-control">Surface<select value={node.style?.surface ?? "inherit"} onChange={(event) => onSurface(node.id, event.target.value as SurfaceChoice)}><option value="inherit">Inherit from parent</option>{SURFACES.map((surface) => <option value={surface.key} key={surface.key}>{surface.label}</option>)}</select></label>;
+}
+
+function ImageFramePicker({ value, onChange }: { value?: ImageFrameKey; onChange: (frame?: ImageFrameKey) => void }) {
+  return <fieldset className="frame-picker"><legend>Image frame</legend><div>
+    <button type="button" className={!value ? "is-selected" : ""} aria-pressed={!value} onClick={() => onChange(undefined)}><span className="frame-none">None</span></button>
+    {IMAGE_FRAMES.map((frame) => <button type="button" className={value === frame.key ? "is-selected" : ""} aria-pressed={value === frame.key} title={frame.label} onClick={() => onChange(frame.key)} key={frame.key}><span style={{ WebkitMaskImage: `url("${frame.asset}")`, maskImage: `url("${frame.asset}")` }} /></button>)}
+  </div></fieldset>;
+}
+
+function OutlineTree({ nodes, onText, onUpdate, onSurface, onMove }: { nodes: Node[]; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSurface: (id: string, surface: SurfaceChoice) => void; onMove: (sourceId: string, target: BlockDropTarget) => void }) {
+  const dnd = useBlockDnd(onMove);
+  return <OutlineNodes nodes={nodes} parentId={null} onText={onText} onUpdate={onUpdate} onSurface={onSurface} dnd={dnd} />;
+}
+
+function OutlineNodes({ nodes, parentId, onText, onUpdate, onSurface, dnd }: { nodes: Node[]; parentId: string | null; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSurface: (id: string, surface: SurfaceChoice) => void; dnd: BlockDndController }) {
   if (!nodes.length) return <div className="outline-nodes is-empty-drop-container"><BlockDropZone axis="vertical" controller={dnd} target={{ parentId, index: 0 }} /></div>;
   return <div className="outline-nodes">{nodes.map((node, index) => {
     const before = { parentId, index };
     const after = { parentId, index: index + 1 };
     return <div className={`outline-node-slot${isActiveTarget(dnd, before) ? " is-target-before" : ""}${index === nodes.length - 1 && isActiveTarget(dnd, after) ? " is-target-after" : ""}`} key={node.id}>
       <BlockDropZone axis="vertical" controller={dnd} target={before} />
-      <OutlineNode node={node} onText={onText} onUpdate={onUpdate} dnd={dnd} />
+      <OutlineNode node={node} onText={onText} onUpdate={onUpdate} onSurface={onSurface} dnd={dnd} />
       {index === nodes.length - 1 && <BlockDropZone axis="vertical" controller={dnd} target={after} />}
     </div>;
   })}</div>;
@@ -433,13 +511,14 @@ function OutlineDragHeader({ node, dnd }: { node: Node; dnd: BlockDndController 
   </header>;
 }
 
-function OutlineNode({ node, onText, onUpdate, dnd }: { node: Node; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; dnd: BlockDndController }) {
+function OutlineNode({ node, onText, onUpdate, onSurface, dnd }: { node: Node; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSurface: (id: string, surface: SurfaceChoice) => void; dnd: BlockDndController }) {
   if (isLayout(node)) {
-    return <section className={`outline-layout${dnd.draggingId === node.id ? " is-dragging" : ""}`} aria-label={`${node.type} layout`}><OutlineDragHeader node={node} dnd={dnd} /><OutlineNodes nodes={node.children} parentId={node.id} onText={onText} onUpdate={onUpdate} dnd={dnd} /></section>;
+    return <section className={`outline-layout${dnd.draggingId === node.id ? " is-dragging" : ""}`} aria-label={`${node.type} layout`}><OutlineDragHeader node={node} dnd={dnd} /><NodeSurfaceControl node={node} onSurface={onSurface} /><OutlineNodes nodes={node.children} parentId={node.id} onText={onText} onUpdate={onUpdate} onSurface={onSurface} dnd={dnd} /></section>;
   }
   return (
     <section className={`outline-block${dnd.draggingId === node.id ? " is-dragging" : ""}`}>
       <OutlineDragHeader node={node} dnd={dnd} />
+      <NodeSurfaceControl node={node} onSurface={onSurface} />
       {isTextNode(node) && <RichTextEditor node={node} onText={onText} onUpdate={onUpdate} />}
       {node.type === "blockquote" && <Field label="Attribution" value={node.props.attribution ?? ""} onChange={(value) => onUpdate(node.id, (current) => current.type === "blockquote" ? { ...current, props: { ...current.props, attribution: value } } : current)} />}
       {node.type === "callout" && <label>Style<select value={node.props.variant} onChange={(event) => onUpdate(node.id, (current) => current.type === "callout" ? { ...current, props: { ...current.props, variant: event.target.value as "accent" | "teal" | "blue" } } : current)}><option value="accent">Accent</option><option value="teal">Teal</option><option value="blue">Blue</option></select></label>}
@@ -447,6 +526,7 @@ function OutlineNode({ node, onText, onUpdate, dnd }: { node: Node; onText: (id:
         <Field label="Image URL" value={node.props.src} onChange={(value) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, src: value } } : current)} />
         <Field label="Alt text" value={node.props.alt} disabled={node.props.decorative} onChange={(value) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, alt: value } } : current)} />
         <Check label="Decorative image" checked={node.props.decorative ?? false} onChange={(checked) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, decorative: checked } } : current)} />
+        <ImageFramePicker value={node.props.frame} onChange={(frame) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, frame } } : current)} />
       </>}
       {node.type === "list" && <>
         <Check label="Numbered list" checked={node.props.ordered} onChange={(checked) => onUpdate(node.id, (current) => current.type === "list" ? { ...current, props: { ...current.props, ordered: checked } } : current)} />

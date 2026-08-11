@@ -129,6 +129,7 @@ export function migrateToLayout(current: SlideDoc, targetKey: string): LayoutMig
   walk(current.blocks, (n) => { if (!isLayout(n)) pool.push(n as ContentNode); });
 
   const doc = target.build();
+  doc.style = current.style;
   walk(doc.blocks, (n, parent) => {
     if (isLayout(n)) return;
     const slot = n as ContentNode;

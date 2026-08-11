@@ -2,6 +2,7 @@
 
 import { BlockDropZone, isActiveTarget, type BlockDndController, type BlockDropTarget, useBlockDnd } from "@/components/BlockDnd";
 import IconTooltip from "@/components/IconTooltip";
+import { frameByKey, patternStyle, surfaceStyle } from "@/lib/slides/styles";
 import type { ContentNode, LayoutNode, Node, RichText, SlideDoc } from "@/lib/slides/types";
 import { isLayout } from "@/lib/slides/types";
 
@@ -25,18 +26,21 @@ function Rich({ value }: { value: RichText }) {
 
 export default function SlideCanvas({ doc, theme, editor }: { doc: SlideDoc; theme: "light" | "dark"; editor?: SlideCanvasEditor }) {
   const dnd = useBlockDnd((sourceId, target) => editor?.onDrop(sourceId, target));
+  const slideStyle = doc.style?.pattern && doc.style.pattern !== "none"
+    ? patternStyle(doc.style.pattern)
+    : surfaceStyle(doc.style?.surface, theme);
   return (
-    <div className="slide-viewport" data-theme={theme}>
+    <div className="slide-viewport" data-theme={theme} data-pattern={doc.style?.pattern ?? "none"} style={slideStyle}>
       {editor ? (
-        <NodeList className="slide-canvas dnd-node-list-vertical" nodes={doc.blocks} parentId={null} axis="vertical" editor={editor} dnd={dnd} />
+        <NodeList className="slide-canvas dnd-node-list-vertical" nodes={doc.blocks} parentId={null} axis="vertical" editor={editor} dnd={dnd} theme={theme} />
       ) : (
-        <div className="slide-canvas">{doc.blocks.map((node) => <RenderNode node={node} key={node.id} />)}</div>
+        <div className="slide-canvas">{doc.blocks.map((node) => <RenderNode node={node} theme={theme} key={node.id} />)}</div>
       )}
     </div>
   );
 }
 
-function NodeList({ className, nodes, parentId, axis, editor, dnd, style }: { className: string; nodes: Node[]; parentId: string | null; axis: "horizontal" | "vertical"; editor: SlideCanvasEditor; dnd: BlockDndController; style?: React.CSSProperties }) {
+function NodeList({ className, nodes, parentId, axis, editor, dnd, style, theme }: { className: string; nodes: Node[]; parentId: string | null; axis: "horizontal" | "vertical"; editor: SlideCanvasEditor; dnd: BlockDndController; style?: React.CSSProperties; theme: "light" | "dark" }) {
   if (!nodes.length) {
     return <div className={`${className} is-empty-drop-container`} style={style}><BlockDropZone axis={axis} controller={dnd} target={{ parentId, index: 0 }} /></div>;
   }
@@ -51,7 +55,7 @@ function NodeList({ className, nodes, parentId, axis, editor, dnd, style }: { cl
             key={node.id}
           >
             <BlockDropZone axis={axis} controller={dnd} target={before} />
-            <RenderNode node={node} editor={editor} dnd={dnd} />
+            <RenderNode node={node} editor={editor} dnd={dnd} theme={theme} />
             {index === nodes.length - 1 && <BlockDropZone axis={axis} controller={dnd} target={after} />}
           </div>
         );
@@ -60,8 +64,11 @@ function NodeList({ className, nodes, parentId, axis, editor, dnd, style }: { cl
   );
 }
 
-function RenderNode({ node, editor, dnd }: { node: Node; editor?: SlideCanvasEditor; dnd?: BlockDndController }) {
-  const rendered = isLayout(node) ? <RenderLayout node={node} editor={editor} dnd={dnd} /> : <RenderContent node={node} />;
+function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" | "dark"; editor?: SlideCanvasEditor; dnd?: BlockDndController }) {
+  const contentStyle = !isLayout(node) ? surfaceStyle(node.style?.surface, theme) : undefined;
+  const rendered = isLayout(node)
+    ? <RenderLayout node={node} theme={theme} editor={editor} dnd={dnd} />
+    : <div className={`slide-node-surface${contentStyle ? " has-surface" : ""}`} style={contentStyle}><RenderContent node={node} /></div>;
   if (!editor) return rendered;
   return (
     <section
@@ -108,17 +115,20 @@ function RenderNode({ node, editor, dnd }: { node: Node; editor?: SlideCanvasEdi
   );
 }
 
-function RenderLayout({ node, editor, dnd }: { node: LayoutNode; editor?: SlideCanvasEditor; dnd?: BlockDndController }) {
+function RenderLayout({ node, theme, editor, dnd }: { node: LayoutNode; theme: "light" | "dark"; editor?: SlideCanvasEditor; dnd?: BlockDndController }) {
   const style = node.type === "columns" || node.type === "grid"
     ? { gridTemplateColumns: `repeat(${node.props.cols ?? 2}, minmax(0, 1fr))` }
     : undefined;
+  const styledSurface = surfaceStyle(node.style?.surface, theme);
+  const combinedStyle = { ...style, ...styledSurface };
+  const surfaceClass = styledSurface ? " has-surface" : "";
   const axis = node.type === "row" || node.type === "columns" || node.type === "grid" ? "horizontal" : "vertical";
   if (editor && dnd) {
-    return <NodeList className={`slide-layout slide-layout-${node.type} dnd-node-list-${axis}`} nodes={node.children} parentId={node.id} axis={axis} editor={editor} dnd={dnd} style={style} />;
+    return <NodeList className={`slide-layout slide-layout-${node.type} dnd-node-list-${axis}${surfaceClass}`} nodes={node.children} parentId={node.id} axis={axis} editor={editor} dnd={dnd} style={combinedStyle} theme={theme} />;
   }
   return (
-    <div className={`slide-layout slide-layout-${node.type}`} style={style}>
-      {node.children.map((child) => <RenderNode node={child} key={child.id} />)}
+    <div className={`slide-layout slide-layout-${node.type}${surfaceClass}`} style={combinedStyle}>
+      {node.children.map((child) => <RenderNode node={child} theme={theme} key={child.id} />)}
     </div>
   );
 }
@@ -130,11 +140,15 @@ function RenderContent({ node }: { node: ContentNode }) {
     case "paragraph": return <p className="slide-paragraph"><Rich value={node.props.text} /></p>;
     case "blockquote": return <blockquote><Rich value={node.props.text} />{node.props.attribution && <cite>{node.props.attribution}</cite>}</blockquote>;
     case "callout": return <aside className={`slide-callout callout-${node.props.variant}`}><Rich value={node.props.text} /></aside>;
-    case "image": return node.props.src ? (
+    case "image": {
+      const frame = frameByKey(node.props.frame);
+      const frameStyle = frame ? { WebkitMaskImage: `url("${frame.asset}")`, maskImage: `url("${frame.asset}")` } : undefined;
+      return node.props.src ? (
       // User-provided image URLs can come from configured client or Blob hosts.
       // eslint-disable-next-line @next/next/no-img-element
-      <img className="slide-image" src={node.props.src} alt={node.props.decorative ? "" : node.props.alt} />
-    ) : <div className="slide-image-placeholder" role="img" aria-label="Empty image block">Image</div>;
+        <img className={`slide-image${frame ? " has-frame" : ""}`} style={frameStyle} src={node.props.src} alt={node.props.decorative ? "" : node.props.alt} />
+      ) : <div className={`slide-image-placeholder${frame ? " has-frame" : ""}`} style={frameStyle} role="img" aria-label="Empty image block">Image</div>;
+    }
     case "list": {
       const List = node.props.ordered ? "ol" : "ul";
       return <List className="slide-list">{node.props.items.map((item, index) => <li key={index}><Rich value={item} /></li>)}</List>;

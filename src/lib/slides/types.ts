@@ -5,14 +5,19 @@
  * Rules:
  *  - Renderers switch() on `type`; adding a block type = extend these unions,
  *    add one renderer per view, add a palette entry.
- *  - No color props anywhere. Color comes exclusively from theme tokens so
- *    light/dark mode always works (req #19).
+ *  - No arbitrary color props. Named, contrast-tested surface recipes resolve
+ *    through the central style registry so light/dark mode stays safe.
  */
+import type { ImageFrameKey, SlidePatternChoice, SurfaceChoice } from "./styles";
 
 export type NodeId = string; // nanoid
 
 export type SlideDoc = {
   version: 1;
+  style?: {
+    surface?: SurfaceChoice;
+    pattern?: SlidePatternChoice;
+  };
   blocks: Node[];
 };
 
@@ -31,6 +36,7 @@ export type LayoutNode = {
     gap?: "sm" | "md" | "lg";
     align?: "start" | "center" | "end" | "stretch";
   };
+  style?: { surface?: SurfaceChoice };
   children: Node[];
 };
 
@@ -55,7 +61,7 @@ export type ContentProps = {
   blockquote: { text: RichText; attribution?: string };
   callout:    { text: RichText; variant: "accent" | "teal" | "blue" };
   paragraph:  { text: RichText };
-  image:      { src: string; alt: string; decorative?: boolean }; // alt required unless decorative
+  image:      { src: string; alt: string; decorative?: boolean; frame?: ImageFrameKey }; // alt required unless decorative
   list:       { ordered: boolean; items: RichText[] };
   statCard:   { value: string; label: string; caption?: string };
   table:      { header: string[]; rows: string[][] };
@@ -71,6 +77,7 @@ export type ContentNode = {
     kind: "content";
     type: T;
     props: ContentProps[T];
+    style?: { surface?: SurfaceChoice };
   };
 }[ContentType];
 
