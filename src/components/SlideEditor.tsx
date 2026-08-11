@@ -9,7 +9,7 @@ import {
 import SlideCanvas from "@/components/SlideCanvas";
 import type { EditorDeck, EditorSlide } from "@/lib/data/editor";
 import { LAYOUTS, migrateToLayout } from "@/lib/slides/layouts";
-import { appendContent, deleteNode, duplicateNode, moveNode } from "@/lib/slides/editor";
+import { appendContent, deleteNode, duplicateNode, moveNode, reorderNode } from "@/lib/slides/editor";
 import type { ContentNode, ContentType, Node, RichText } from "@/lib/slides/types";
 import { isLayout } from "@/lib/slides/types";
 
@@ -70,27 +70,38 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
     savingRef.current = true;
     setSaveState("saving");
     setMessage("");
-    const result = await saveSlideAction({
-      deckId: deck.id,
-      slideId: initialSlide.id,
-      expectedUpdatedAt: updatedAt,
-      layoutKey: snapshotLayout,
-      blocks: snapshot,
-    });
-    savingRef.current = false;
-    if (result.status === "saved") {
-      setUpdatedAt(result.updatedAt);
-      setSavedDoc(snapshot);
-      setSavedLayoutKey(snapshotLayout);
-      setSaveState(
-        layoutRef.current === snapshotLayout && JSON.stringify(docRef.current) === JSON.stringify(snapshot)
-          ? "saved" : "dirty",
-      );
-    } else {
+    try {
+      const result = await saveSlideAction({
+        deckId: deck.id,
+        slideId: initialSlide.id,
+        expectedUpdatedAt: updatedAt,
+        layoutKey: snapshotLayout,
+        blocks: snapshot,
+      });
+      if (result.status === "saved") {
+        setUpdatedAt(result.updatedAt);
+        setSavedDoc(snapshot);
+        setSavedLayoutKey(snapshotLayout);
+        setSaveState(
+          layoutRef.current === snapshotLayout && JSON.stringify(docRef.current) === JSON.stringify(snapshot)
+            ? "saved" : "dirty",
+        );
+      } else {
+        setSaveState(result.status);
+        setMessage(result.message);
+      }
+      return result;
+    } catch {
+      const result: SaveSlideResult = {
+        status: "error",
+        message: "The development server briefly disconnected. Your changes are still in this tab; try Save again.",
+      };
       setSaveState(result.status);
       setMessage(result.message);
+      return result;
+    } finally {
+      savingRef.current = false;
     }
-    return result;
   }
 
   useEffect(() => {
@@ -120,9 +131,18 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
       ...current,
       blocks: replaceNode(current.blocks, id, (node) => {
         if (!isTextNode(node)) return node;
-        return { ...node, props: { ...node.props, text: [{ text }] } } as ContentNode;
+        const marks = node.props.text[0] ?? { text: "" };
+        return { ...node, props: { ...node.props, text: [{ ...marks, text }] } } as ContentNode;
       }),
     }));
+  }
+
+  function updateNode(id: string, update: (node: ContentNode) => ContentNode) {
+    if (saveState !== "conflict") {
+      setSaveState("dirty");
+      setMessage("");
+    }
+    setDoc((current) => ({ ...current, blocks: replaceNode(current.blocks, id, update) }));
   }
 
   function markDoc(next: ReturnType<typeof appendContent>) {
@@ -159,45 +179,58 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
 
   function addSlide() {
     startAdding(async () => {
-      if (dirty) {
-        const saved = await save();
-        if (!saved || saved.status !== "saved") return;
-      }
-      const result = await addSlideAction(deck.id);
-      if (result.status === "error") {
+      try {
+        if (dirty) {
+          const saved = await save();
+          if (!saved || saved.status !== "saved") return;
+        }
+        const result = await addSlideAction(deck.id);
+        if (result.status === "error") {
+          setSaveState("error"); setMessage(result.message); return;
+        }
+        router.push(`/decks/${deck.id}/edit/${result.position}`);
+        router.refresh();
+      } catch {
         setSaveState("error");
-        setMessage(result.message);
-        return;
+        setMessage("The development server briefly disconnected. Try adding the slide again.");
       }
-      router.push(`/decks/${deck.id}/edit/${result.position}`);
-      router.refresh();
     });
   }
 
   function duplicateCurrentSlide() {
     startAdding(async () => {
-      if (dirty) {
-        const saved = await save();
-        if (!saved || saved.status !== "saved") return;
+      try {
+        if (dirty) {
+          const saved = await save();
+          if (!saved || saved.status !== "saved") return;
+        }
+        const result = await duplicateSlideAction(deck.id, initialSlide.id);
+        if (result.status === "error") {
+          setSaveState("error"); setMessage(result.message); return;
+        }
+        router.push(`/decks/${deck.id}/edit/${result.position}`);
+        router.refresh();
+      } catch {
+        setSaveState("error");
+        setMessage("The development server briefly disconnected. Try duplicating the slide again.");
       }
-      const result = await duplicateSlideAction(deck.id, initialSlide.id);
-      if (result.status === "error") {
-        setSaveState("error"); setMessage(result.message); return;
-      }
-      router.push(`/decks/${deck.id}/edit/${result.position}`);
-      router.refresh();
     });
   }
 
   function deleteCurrentSlide() {
     if (!window.confirm(`Delete slide ${initialSlide.position}? This cannot be undone.`)) return;
     startAdding(async () => {
-      const result = await deleteSlideAction(deck.id, initialSlide.id);
-      if (result.status === "error") {
-        setSaveState("error"); setMessage(result.message); return;
+      try {
+        const result = await deleteSlideAction(deck.id, initialSlide.id);
+        if (result.status === "error") {
+          setSaveState("error"); setMessage(result.message); return;
+        }
+        router.push(`/decks/${deck.id}/edit/${result.position}`);
+        router.refresh();
+      } catch {
+        setSaveState("error");
+        setMessage("The development server briefly disconnected. Try deleting the slide again.");
       }
-      router.push(`/decks/${deck.id}/edit/${result.position}`);
-      router.refresh();
     });
   }
 
@@ -285,8 +318,9 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
             onDelete: removeBlock,
             onDuplicate: (node) => markDoc(duplicateNode(docRef.current, node.id)),
             onMove: (node, direction) => markDoc(moveNode(docRef.current, node.id, direction)),
+            onDrop: (sourceId, targetId) => markDoc(reorderNode(docRef.current, sourceId, targetId)),
           }} /></div>}
-          {tab === "outline" && <div className="outline-workspace"><OutlineNodes nodes={doc.blocks} onText={updateText} /></div>}
+          {tab === "outline" && <div className="outline-workspace"><OutlineNodes nodes={doc.blocks} onText={updateText} onUpdate={updateNode} /></div>}
           {tab === "voiceover" && <div className="voiceover-empty"><p className="eyebrow">Voiceover</p><h2>Add narration after the editing foundation is complete</h2><p>The player, audio upload, and caption cue editor are the following roadmap milestone.</p></div>}
         </section>
       </div>
@@ -301,19 +335,77 @@ function MiniNode({ node }: { node: Node }) {
   return <small>{node.type}</small>;
 }
 
-function OutlineNodes({ nodes, onText }: { nodes: Node[]; onText: (id: string, text: string) => void }) {
-  return <div className="outline-nodes">{nodes.map((node) => <OutlineNode node={node} onText={onText} key={node.id} />)}</div>;
+function OutlineNodes({ nodes, onText, onUpdate }: { nodes: Node[]; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void }) {
+  return <div className="outline-nodes">{nodes.map((node) => <OutlineNode node={node} onText={onText} onUpdate={onUpdate} key={node.id} />)}</div>;
 }
 
-function OutlineNode({ node, onText }: { node: Node; onText: (id: string, text: string) => void }) {
+function OutlineNode({ node, onText, onUpdate }: { node: Node; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void }) {
   if (isLayout(node)) {
-    return <fieldset className="outline-layout"><legend>{node.type}</legend><OutlineNodes nodes={node.children} onText={onText} /></fieldset>;
+    return <fieldset className="outline-layout"><legend>{node.type}</legend><OutlineNodes nodes={node.children} onText={onText} onUpdate={onUpdate} /></fieldset>;
   }
-  const editable = isTextNode(node);
   return (
-    <label className="outline-block">
-      <span>{node.type}</span>
-      {editable ? <textarea value={plainText(node.props.text)} onChange={(event) => onText(node.id, event.target.value)} rows={node.type === "title" ? 2 : 4} /> : <small>This block’s detailed controls arrive with the content palette.</small>}
-    </label>
+    <section className="outline-block">
+      <h3>{node.type}</h3>
+      {isTextNode(node) && <RichTextEditor node={node} onText={onText} onUpdate={onUpdate} />}
+      {node.type === "blockquote" && <Field label="Attribution" value={node.props.attribution ?? ""} onChange={(value) => onUpdate(node.id, (current) => current.type === "blockquote" ? { ...current, props: { ...current.props, attribution: value } } : current)} />}
+      {node.type === "callout" && <label>Style<select value={node.props.variant} onChange={(event) => onUpdate(node.id, (current) => current.type === "callout" ? { ...current, props: { ...current.props, variant: event.target.value as "accent" | "teal" | "blue" } } : current)}><option value="accent">Accent</option><option value="teal">Teal</option><option value="blue">Blue</option></select></label>}
+      {node.type === "image" && <>
+        <Field label="Image URL" value={node.props.src} onChange={(value) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, src: value } } : current)} />
+        <Field label="Alt text" value={node.props.alt} disabled={node.props.decorative} onChange={(value) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, alt: value } } : current)} />
+        <Check label="Decorative image" checked={node.props.decorative ?? false} onChange={(checked) => onUpdate(node.id, (current) => current.type === "image" ? { ...current, props: { ...current.props, decorative: checked } } : current)} />
+      </>}
+      {node.type === "list" && <>
+        <Check label="Numbered list" checked={node.props.ordered} onChange={(checked) => onUpdate(node.id, (current) => current.type === "list" ? { ...current, props: { ...current.props, ordered: checked } } : current)} />
+        <label>Items <small>One item per line</small><textarea rows={5} value={node.props.items.map(plainText).join("\n")} onChange={(event) => onUpdate(node.id, (current) => current.type === "list" ? { ...current, props: { ...current.props, items: event.target.value.split("\n").map((text) => [{ text }]) } } : current)} /></label>
+      </>}
+      {node.type === "statCard" && <>
+        <Field label="Value" value={node.props.value} onChange={(value) => onUpdate(node.id, (current) => current.type === "statCard" ? { ...current, props: { ...current.props, value } } : current)} />
+        <Field label="Label" value={node.props.label} onChange={(value) => onUpdate(node.id, (current) => current.type === "statCard" ? { ...current, props: { ...current.props, label: value } } : current)} />
+        <Field label="Caption" value={node.props.caption ?? ""} onChange={(value) => onUpdate(node.id, (current) => current.type === "statCard" ? { ...current, props: { ...current.props, caption: value } } : current)} />
+      </>}
+      {node.type === "table" && <>
+        <Field label="Headers" hint="Separate columns with |" value={node.props.header.join(" | ")} onChange={(value) => onUpdate(node.id, (current) => current.type === "table" ? { ...current, props: { ...current.props, header: splitRow(value) } } : current)} />
+        <label>Rows <small>One row per line; separate columns with |</small><textarea rows={5} value={node.props.rows.map((row) => row.join(" | ")).join("\n")} onChange={(event) => onUpdate(node.id, (current) => current.type === "table" ? { ...current, props: { ...current.props, rows: event.target.value.split("\n").map(splitRow) } } : current)} /></label>
+      </>}
+      {node.type === "pricingTable" && <label>Pricing columns <small>Name | Price | comma-separated features</small><textarea rows={6} value={node.props.columns.map((column) => `${column.name} | ${column.price} | ${column.features.join(", ")}`).join("\n")} onChange={(event) => onUpdate(node.id, (current) => current.type === "pricingTable" ? { ...current, props: { ...current.props, columns: event.target.value.split("\n").filter(Boolean).map((line) => { const [name = "", price = "", features = ""] = line.split("|").map((part) => part.trim()); return { name, price, features: features.split(",").map((feature) => feature.trim()).filter(Boolean) }; }) } } : current)} /></label>}
+      {node.type === "chart" && <>
+        <label>Chart type<select value={node.props.chartType} onChange={(event) => onUpdate(node.id, (current) => current.type === "chart" ? { ...current, props: { ...current.props, chartType: event.target.value as "bar" | "line" | "pie" } } : current)}><option value="bar">Bar</option><option value="line">Line</option><option value="pie">Pie</option></select></label>
+        <Field label="Labels" hint="Comma separated" value={node.props.labels.join(", ")} onChange={(value) => onUpdate(node.id, (current) => current.type === "chart" ? { ...current, props: { ...current.props, labels: value.split(",").map((part) => part.trim()) } } : current)} />
+        <Field label="Values" hint="Comma separated numbers" value={node.props.series.join(", ")} onChange={(value) => onUpdate(node.id, (current) => current.type === "chart" ? { ...current, props: { ...current.props, series: value.split(",").map((part) => Number(part.trim()) || 0) } } : current)} />
+      </>}
+    </section>
   );
+}
+
+function RichTextEditor({ node, onText, onUpdate }: { node: TextNode; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void }) {
+  const marks = node.props.text[0] ?? { text: "" };
+  const setMark = (mark: "bold" | "italic" | "underline", value: boolean) => onUpdate(node.id, (current) => {
+    if (!isTextNode(current)) return current;
+    return { ...current, props: { ...current.props, text: current.props.text.map((part) => ({ ...part, [mark]: value || undefined })) } } as ContentNode;
+  });
+  return <>
+    <div className="rich-toolbar" aria-label={`Format ${node.type}`}>
+      <button type="button" aria-pressed={marks.bold ?? false} onClick={() => setMark("bold", !marks.bold)}><strong>B</strong></button>
+      <button type="button" aria-pressed={marks.italic ?? false} onClick={() => setMark("italic", !marks.italic)}><em>I</em></button>
+      <button type="button" aria-pressed={marks.underline ?? false} onClick={() => setMark("underline", !marks.underline)}><u>U</u></button>
+      <label>Size<select value={marks.size ?? "md"} onChange={(event) => onUpdate(node.id, (current) => {
+        if (!isTextNode(current)) return current;
+        const size = event.target.value as "sm" | "md" | "lg";
+        return { ...current, props: { ...current.props, text: current.props.text.map((part) => ({ ...part, size })) } } as ContentNode;
+      })}><option value="sm">Small</option><option value="md">Medium</option><option value="lg">Large</option></select></label>
+    </div>
+    <textarea value={plainText(node.props.text)} onChange={(event) => onText(node.id, event.target.value)} rows={node.type === "title" ? 2 : 4} aria-label={`${node.type} text`} />
+  </>;
+}
+
+function Field({ label, value, onChange, hint, disabled = false }: { label: string; value: string; onChange: (value: string) => void; hint?: string; disabled?: boolean }) {
+  return <label>{label}{hint && <small>{hint}</small>}<input type="text" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} /></label>;
+}
+
+function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return <label className="outline-check"><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />{label}</label>;
+}
+
+function splitRow(value: string): string[] {
+  return value.split("|").map((part) => part.trim());
 }

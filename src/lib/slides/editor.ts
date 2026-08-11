@@ -79,3 +79,23 @@ export function moveNode(doc: SlideDoc, id: string, direction: -1 | 1): SlideDoc
     }),
   };
 }
+
+function reorderWithinSameParent(nodes: Node[], sourceId: string, targetId: string): Node[] {
+  const sourceIndex = nodes.findIndex((node) => node.id === sourceId);
+  const targetIndex = nodes.findIndex((node) => node.id === targetId);
+  if (sourceIndex !== -1 && targetIndex !== -1 && sourceIndex !== targetIndex) {
+    const next = [...nodes];
+    const [source] = next.splice(sourceIndex, 1);
+    const adjustedTarget = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    next.splice(adjustedTarget, 0, source);
+    return next;
+  }
+  return nodes.map((node) => isLayout(node)
+    ? { ...node, children: reorderWithinSameParent(node.children, sourceId, targetId) }
+    : node);
+}
+
+/** Reorder two sibling blocks. Cross-layout drops are intentionally ignored. */
+export function reorderNode(doc: SlideDoc, sourceId: string, targetId: string): SlideDoc {
+  return { ...doc, blocks: reorderWithinSameParent(doc.blocks, sourceId, targetId) };
+}

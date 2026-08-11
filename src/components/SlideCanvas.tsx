@@ -5,6 +5,7 @@ export type SlideCanvasEditor = {
   onDelete: (node: Node) => void;
   onDuplicate: (node: Node) => void;
   onMove: (node: Node, direction: -1 | 1) => void;
+  onDrop: (sourceId: string, targetId: string) => void;
 };
 
 function Rich({ value }: { value: RichText }) {
@@ -31,7 +32,24 @@ function RenderNode({ node, editor }: { node: Node; editor?: SlideCanvasEditor }
   const rendered = isLayout(node) ? <RenderLayout node={node} editor={editor} /> : <RenderContent node={node} />;
   if (!editor) return rendered;
   return (
-    <section className={`editable-slide-block editable-slide-block-${node.kind}`} tabIndex={0} aria-label={`${node.type} block`}>
+    <section
+      className={`editable-slide-block editable-slide-block-${node.kind}`}
+      tabIndex={0}
+      draggable
+      aria-label={`${node.type} block`}
+      onDragStart={(event) => {
+        event.stopPropagation();
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", node.id);
+      }}
+      onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const sourceId = event.dataTransfer.getData("text/plain");
+        if (sourceId) editor.onDrop(sourceId, node.id);
+      }}
+    >
       <header className="block-chrome">
         <span aria-hidden="true">⠿</span><strong>{node.type}</strong>
         <div>

@@ -12,7 +12,8 @@ See PLAN.md for the full technical plan, pitfalls, and timeline.
 - [x] New deck flow for existing/new clients, optional events, and a starter slide
 - [x] Editor shell, visual/outline views, autosave, and conflict-safe slide persistence
 - [x] Content palette, visible block controls, safe layouts, and basic slide management
-- [ ] Block-specific property editors, rich-text toolbar, and drag-and-drop (next milestone)
+- [x] Block-specific property editors, rich-text toolbar, and drag-and-drop
+- [ ] Block templates informed by real marketing decks (next milestone)
 - [ ] Vercel Blob token and voiceover upload
 - [x] Initial Vercel deployment
 - [ ] Public-deck DNS
