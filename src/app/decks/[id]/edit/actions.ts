@@ -4,7 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { and, asc, eq, gt, gte, lt, max, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { decks, slides } from "@/lib/db/schema";
+import { decks, libraryItems, slides } from "@/lib/db/schema";
 import { layoutByKey } from "@/lib/slides/layouts";
 import { cloneDoc } from "@/lib/slides/editor";
 import type { Node, SlideDoc } from "@/lib/slides/types";
@@ -12,6 +12,10 @@ import type { Node, SlideDoc } from "@/lib/slides/types";
 export type SaveSlideResult =
   | { status: "saved"; updatedAt: string }
   | { status: "conflict"; message: string }
+  | { status: "error"; message: string };
+
+export type SaveLibraryItemResult =
+  | { status: "saved"; name: string }
   | { status: "error"; message: string };
 
 const contentTypes = new Set([
@@ -39,6 +43,35 @@ function isSlideDoc(value: unknown): value is SlideDoc {
   return doc.version === 1 && Array.isArray(doc.blocks)
     && doc.blocks.length <= 100
     && doc.blocks.every((node) => isNode(node));
+}
+
+export async function saveBlockToLibraryAction(input: {
+  name: string;
+  node: Node;
+}): Promise<SaveLibraryItemResult> {
+  const { userId } = await auth();
+  if (!userId) return { status: "error", message: "Your session expired. Sign in again to save library items." };
+
+  const name = input.name.trim();
+  if (!name) return { status: "error", message: "Give this library block a name." };
+  if (name.length > 100) return { status: "error", message: "Library names must be 100 characters or fewer." };
+  if (!isNode(input.node) || JSON.stringify(input.node).length > 200_000) {
+    return { status: "error", message: "This block cannot be saved because its content is invalid or too large." };
+  }
+
+  try {
+    await db.insert(libraryItems).values({
+      kind: "block",
+      name,
+      payload: input.node,
+      createdBy: userId,
+    });
+    revalidatePath("/library");
+    return { status: "saved", name };
+  } catch (error) {
+    console.error("Failed to save library block", error);
+    return { status: "error", message: "The block could not be saved to the library. Try again." };
+  }
 }
 
 export async function saveSlideAction(input: {

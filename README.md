@@ -13,6 +13,8 @@ See PLAN.md for the full technical plan, pitfalls, and timeline.
 - [x] Editor shell, visual/outline views, autosave, and conflict-safe slide persistence
 - [x] Content palette, visible block controls, safe layouts, and basic slide management
 - [x] Block-specific property editors, rich-text toolbar, and drag-and-drop
+- [x] Save reusable block snapshots from the editor chrome
+- [ ] Library palette insertion and management screen
 - [ ] Block templates informed by real marketing decks (next milestone)
 - [ ] Vercel Blob token and voiceover upload
 - [x] Initial Vercel deployment

@@ -80,22 +80,71 @@ export function moveNode(doc: SlideDoc, id: string, direction: -1 | 1): SlideDoc
   };
 }
 
-function reorderWithinSameParent(nodes: Node[], sourceId: string, targetId: string): Node[] {
-  const sourceIndex = nodes.findIndex((node) => node.id === sourceId);
-  const targetIndex = nodes.findIndex((node) => node.id === targetId);
-  if (sourceIndex !== -1 && targetIndex !== -1 && sourceIndex !== targetIndex) {
-    const next = [...nodes];
-    const [source] = next.splice(sourceIndex, 1);
-    const adjustedTarget = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
-    next.splice(adjustedTarget, 0, source);
-    return next;
+type NodeLocation = { index: number; node: Node; parentId: string | null };
+
+function findLocation(nodes: Node[], id: string, parentId: string | null = null): NodeLocation | null {
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    if (node.id === id) return { index, node, parentId };
+    if (isLayout(node)) {
+      const nested = findLocation(node.children, id, node.id);
+      if (nested) return nested;
+    }
   }
-  return nodes.map((node) => isLayout(node)
-    ? { ...node, children: reorderWithinSameParent(node.children, sourceId, targetId) }
-    : node);
+  return null;
 }
 
-/** Reorder two sibling blocks. Cross-layout drops are intentionally ignored. */
-export function reorderNode(doc: SlideDoc, sourceId: string, targetId: string): SlideDoc {
-  return { ...doc, blocks: reorderWithinSameParent(doc.blocks, sourceId, targetId) };
+function containsNode(node: Node, id: string): boolean {
+  return node.id === id || (isLayout(node) && node.children.some((child) => containsNode(child, id)));
+}
+
+function updateParentChildren(
+  nodes: Node[],
+  parentId: string | null,
+  update: (children: Node[]) => Node[],
+): Node[] {
+  if (parentId === null) return update(nodes);
+  return nodes.map((node) => {
+    if (!isLayout(node)) return node;
+    if (node.id === parentId) return { ...node, children: update(node.children) };
+    return { ...node, children: updateParentChildren(node.children, parentId, update) };
+  });
+}
+
+/**
+ * Move a node to an insertion point at any tree depth. The operation refuses
+ * cycles (a layout cannot move inside itself or one of its descendants) and
+ * returns the original document for invalid or no-op drops.
+ */
+export function moveNodeTo(
+  doc: SlideDoc,
+  sourceId: string,
+  targetParentId: string | null,
+  targetIndex: number,
+): SlideDoc {
+  const source = findLocation(doc.blocks, sourceId);
+  if (!source) return doc;
+
+  if (targetParentId !== null) {
+    const targetParent = findLocation(doc.blocks, targetParentId)?.node;
+    if (!targetParent || !isLayout(targetParent) || containsNode(source.node, targetParentId)) return doc;
+  }
+
+  const targetChildren = targetParentId === null
+    ? doc.blocks
+    : (findLocation(doc.blocks, targetParentId)?.node as Extract<Node, { kind: "layout" }>).children;
+  let insertionIndex = Math.max(0, Math.min(targetIndex, targetChildren.length));
+  if (source.parentId === targetParentId && source.index < insertionIndex) insertionIndex -= 1;
+  if (source.parentId === targetParentId && source.index === insertionIndex) return doc;
+
+  const withoutSource = updateParentChildren(doc.blocks, source.parentId, (children) => [
+    ...children.slice(0, source.index),
+    ...children.slice(source.index + 1),
+  ]);
+  const withSource = updateParentChildren(withoutSource, targetParentId, (children) => [
+    ...children.slice(0, insertionIndex),
+    source.node,
+    ...children.slice(insertionIndex),
+  ]);
+  return { ...doc, blocks: withSource };
 }

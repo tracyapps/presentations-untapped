@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { BlockDropZone, isActiveTarget, type BlockDndController, type BlockDropTarget, useBlockDnd } from "@/components/BlockDnd";
 import {
-  addSlideAction, deleteSlideAction, duplicateSlideAction, saveSlideAction, type SaveSlideResult,
+  addSlideAction, deleteSlideAction, duplicateSlideAction, saveBlockToLibraryAction,
+  saveSlideAction, type SaveSlideResult,
 } from "@/app/decks/[id]/edit/actions";
 import SlideCanvas from "@/components/SlideCanvas";
 import type { EditorDeck, EditorSlide } from "@/lib/data/editor";
 import { LAYOUTS, migrateToLayout } from "@/lib/slides/layouts";
-import { appendContent, deleteNode, duplicateNode, moveNode, reorderNode } from "@/lib/slides/editor";
+import { appendContent, deleteNode, duplicateNode, moveNode, moveNodeTo } from "@/lib/slides/editor";
 import type { ContentNode, ContentType, Node, RichText } from "@/lib/slides/types";
 import { isLayout } from "@/lib/slides/types";
 
@@ -52,7 +54,11 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
   const [updatedAt, setUpdatedAt] = useState(initialSlide.updatedAt);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [message, setMessage] = useState("");
+  const [libraryNotice, setLibraryNotice] = useState("");
+  const [libraryTarget, setLibraryTarget] = useState<Node | null>(null);
+  const [libraryName, setLibraryName] = useState("");
   const [isAdding, startAdding] = useTransition();
+  const [isSavingLibrary, startSavingLibrary] = useTransition();
   const docRef = useRef(doc);
   const layoutRef = useRef(layoutKey);
   const savingRef = useRef(false);
@@ -63,7 +69,6 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
 
   useEffect(() => { docRef.current = doc; }, [doc]);
   useEffect(() => { layoutRef.current = layoutKey; }, [layoutKey]);
-  useEffect(() => { if (dirty && saveState === "saved") setSaveState("dirty"); }, [dirty, saveState]);
 
   async function save(snapshot = docRef.current, snapshotLayout = layoutRef.current): Promise<SaveSlideResult | null> {
     if (savingRef.current) return null;
@@ -173,8 +178,38 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
     markDoc(deleteNode(docRef.current, node.id));
   }
 
+  function dropBlock(sourceId: string, target: BlockDropTarget) {
+    const next = moveNodeTo(docRef.current, sourceId, target.parentId, target.index);
+    if (next !== docRef.current) markDoc(next);
+  }
+
   function confirmNavigate(event: React.MouseEvent) {
     if (dirty && !window.confirm("Leave before your latest changes are saved?")) event.preventDefault();
+  }
+
+  function openLibraryDialog(node: Node) {
+    setLibraryTarget(node);
+    setLibraryName(`${node.type.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase())} block`);
+    setLibraryNotice("");
+  }
+
+  function saveToLibrary(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!libraryTarget) return;
+    const target = structuredClone(libraryTarget);
+    startSavingLibrary(async () => {
+      try {
+        const result = await saveBlockToLibraryAction({ name: libraryName, node: target });
+        if (result.status === "error") {
+          setLibraryNotice(result.message);
+          return;
+        }
+        setLibraryTarget(null);
+        setLibraryNotice(`“${result.name}” was saved to the library.`);
+      } catch {
+        setLibraryNotice("The development server briefly disconnected. Try saving the block again.");
+      }
+    });
   }
 
   function addSlide() {
@@ -241,6 +276,11 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
     conflict: "Save conflict",
     error: "Save failed",
   };
+  // Dirty/saved is derived from the actual document diff. The state variable
+  // only wins while an asynchronous or exceptional state is active.
+  const visibleSaveState: SaveState = saveState === "saving" || saveState === "conflict" || saveState === "error"
+    ? saveState
+    : dirty ? "dirty" : "saved";
 
   return (
     <main className="editor-shell">
@@ -257,13 +297,14 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
           ))}
         </nav>
         <div className="editor-actions">
-          <span className={`save-state save-state-${saveState}`} aria-live="polite">{stateLabel[saveState]}</span>
+          <span className={`save-state save-state-${visibleSaveState}`} aria-live="polite">{stateLabel[visibleSaveState]}</span>
           <Link className="button button-secondary" href="/decks" onClick={confirmNavigate}>Close</Link>
           <button className="button button-primary" type="button" onClick={() => void save()} disabled={!dirty || saveState === "saving" || saveState === "conflict"}>Save</button>
         </div>
       </header>
 
       {message && <div className={`editor-message editor-message-${saveState}`} role="alert">{message}{saveState === "conflict" && <button type="button" onClick={() => window.location.reload()}>Refresh slide</button>}</div>}
+      {libraryNotice && !libraryTarget && <div className="editor-message editor-message-success" role="status">{libraryNotice}</div>}
 
       <div className="editor-body">
         <aside className="slide-strip" aria-label="Slides">
@@ -318,12 +359,39 @@ export default function SlideEditor({ deck, initialSlide }: { deck: EditorDeck; 
             onDelete: removeBlock,
             onDuplicate: (node) => markDoc(duplicateNode(docRef.current, node.id)),
             onMove: (node, direction) => markDoc(moveNode(docRef.current, node.id, direction)),
-            onDrop: (sourceId, targetId) => markDoc(reorderNode(docRef.current, sourceId, targetId)),
+            onDrop: dropBlock,
+            onSaveToLibrary: openLibraryDialog,
           }} /></div>}
-          {tab === "outline" && <div className="outline-workspace"><OutlineNodes nodes={doc.blocks} onText={updateText} onUpdate={updateNode} /></div>}
+          {tab === "outline" && <div className="outline-workspace"><OutlineTree nodes={doc.blocks} onText={updateText} onUpdate={updateNode} onMove={dropBlock} /></div>}
           {tab === "voiceover" && <div className="voiceover-empty"><p className="eyebrow">Voiceover</p><h2>Add narration after the editing foundation is complete</h2><p>The player, audio upload, and caption cue editor are the following roadmap milestone.</p></div>}
         </section>
       </div>
+      {libraryTarget && (
+        <div
+          className="editor-dialog-backdrop"
+          onMouseDown={(event) => { if (event.target === event.currentTarget && !isSavingLibrary) setLibraryTarget(null); }}
+        >
+          <section
+            className="editor-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="library-dialog-title"
+            onKeyDown={(event) => { if (event.key === "Escape" && !isSavingLibrary) setLibraryTarget(null); }}
+          >
+            <form onSubmit={saveToLibrary}>
+              <p className="eyebrow">Reusable block</p>
+              <h2 id="library-dialog-title">Save to library</h2>
+              <p>Save a snapshot of this {libraryTarget.type} block. Editing the original later will not change the library copy.</p>
+              <label>Library name<input autoFocus maxLength={100} required value={libraryName} onChange={(event) => { setLibraryName(event.target.value); setLibraryNotice(""); }} /></label>
+              {libraryNotice && <div className="dialog-error" role="alert">{libraryNotice}</div>}
+              <div className="editor-dialog-actions">
+                <button className="button button-secondary" type="button" disabled={isSavingLibrary} onClick={() => setLibraryTarget(null)}>Cancel</button>
+                <button className="button button-primary" type="submit" disabled={isSavingLibrary || !libraryName.trim()}>{isSavingLibrary ? "Saving…" : "Save block"}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
@@ -335,17 +403,43 @@ function MiniNode({ node }: { node: Node }) {
   return <small>{node.type}</small>;
 }
 
-function OutlineNodes({ nodes, onText, onUpdate }: { nodes: Node[]; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void }) {
-  return <div className="outline-nodes">{nodes.map((node) => <OutlineNode node={node} onText={onText} onUpdate={onUpdate} key={node.id} />)}</div>;
+function OutlineTree({ nodes, onText, onUpdate, onMove }: { nodes: Node[]; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onMove: (sourceId: string, target: BlockDropTarget) => void }) {
+  const dnd = useBlockDnd(onMove);
+  return <OutlineNodes nodes={nodes} parentId={null} onText={onText} onUpdate={onUpdate} dnd={dnd} />;
 }
 
-function OutlineNode({ node, onText, onUpdate }: { node: Node; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void }) {
+function OutlineNodes({ nodes, parentId, onText, onUpdate, dnd }: { nodes: Node[]; parentId: string | null; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; dnd: BlockDndController }) {
+  if (!nodes.length) return <div className="outline-nodes is-empty-drop-container"><BlockDropZone axis="vertical" controller={dnd} target={{ parentId, index: 0 }} /></div>;
+  return <div className="outline-nodes">{nodes.map((node, index) => {
+    const before = { parentId, index };
+    const after = { parentId, index: index + 1 };
+    return <div className={`outline-node-slot${isActiveTarget(dnd, before) ? " is-target-before" : ""}${index === nodes.length - 1 && isActiveTarget(dnd, after) ? " is-target-after" : ""}`} key={node.id}>
+      <BlockDropZone axis="vertical" controller={dnd} target={before} />
+      <OutlineNode node={node} onText={onText} onUpdate={onUpdate} dnd={dnd} />
+      {index === nodes.length - 1 && <BlockDropZone axis="vertical" controller={dnd} target={after} />}
+    </div>;
+  })}</div>;
+}
+
+function OutlineDragHeader({ node, dnd }: { node: Node; dnd: BlockDndController }) {
+  return <header
+    className="outline-block-header"
+    draggable
+    onDragStart={(event) => dnd.start(event, node.id, event.currentTarget.closest(".outline-block, .outline-layout"))}
+    onDragEnd={() => dnd.finish()}
+  >
+    <span className="outline-drag-handle" aria-hidden="true">⠿</span>
+    <h3>{node.type}</h3>
+  </header>;
+}
+
+function OutlineNode({ node, onText, onUpdate, dnd }: { node: Node; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; dnd: BlockDndController }) {
   if (isLayout(node)) {
-    return <fieldset className="outline-layout"><legend>{node.type}</legend><OutlineNodes nodes={node.children} onText={onText} onUpdate={onUpdate} /></fieldset>;
+    return <section className={`outline-layout${dnd.draggingId === node.id ? " is-dragging" : ""}`} aria-label={`${node.type} layout`}><OutlineDragHeader node={node} dnd={dnd} /><OutlineNodes nodes={node.children} parentId={node.id} onText={onText} onUpdate={onUpdate} dnd={dnd} /></section>;
   }
   return (
-    <section className="outline-block">
-      <h3>{node.type}</h3>
+    <section className={`outline-block${dnd.draggingId === node.id ? " is-dragging" : ""}`}>
+      <OutlineDragHeader node={node} dnd={dnd} />
       {isTextNode(node) && <RichTextEditor node={node} onText={onText} onUpdate={onUpdate} />}
       {node.type === "blockquote" && <Field label="Attribution" value={node.props.attribution ?? ""} onChange={(value) => onUpdate(node.id, (current) => current.type === "blockquote" ? { ...current, props: { ...current.props, attribution: value } } : current)} />}
       {node.type === "callout" && <label>Style<select value={node.props.variant} onChange={(event) => onUpdate(node.id, (current) => current.type === "callout" ? { ...current, props: { ...current.props, variant: event.target.value as "accent" | "teal" | "blue" } } : current)}><option value="accent">Accent</option><option value="teal">Teal</option><option value="blue">Blue</option></select></label>}
