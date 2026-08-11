@@ -1,0 +1,29 @@
+{
+  "name": "presentations-untapped",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "@clerk/nextjs": "^6.20.0",
+    "@neondatabase/serverless": "^1.0.0",
+    "drizzle-orm": "^0.44.0",
+    "nanoid": "^5.0.9",
+    "next": "^15.3.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.0",
+    "typescript": "^5"
+  }
+}

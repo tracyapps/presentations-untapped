@@ -1,0 +1,26 @@
+/**
+ * Do not edit directly, this file was auto-generated.
+ */
+
+:root[data-theme="dark"], [data-theme="dark"] {
+  --bg-page: #1b1815;
+  --bg-surface: #241f1b;
+  --bg-surface-raised: #2c2620;
+  --text-secondary: #c7bfb5;
+  --text-on-accent: #ffffff;
+  --shadow-color: 0 0% 0%;
+  --bg-inverse: var(--lu-cream);
+  --bg-accent-soft: oklch(from var(--lu-orange) 0.28 0.05 h);
+  --bg-teal-soft: oklch(from var(--lu-teal) 0.26 0.05 h);
+  --bg-blue-soft: oklch(from var(--lu-blue) 0.26 0.05 h);
+  --text-primary: var(--lu-cream);
+  --text-inverse: var(--lu-charcoal);
+  --link-color: var(--lu-amber);
+  --link-color-hover: var(--lu-yellow);
+  --border-default: oklch(from var(--lu-cream) 0.9 0.01 h / 0.14);
+  --border-strong: oklch(from var(--lu-cream) 0.9 0.01 h / 0.26);
+  --accent-primary-hover: oklch(from var(--lu-orange) calc(l + 0.08) c h);
+  --accent-primary-active: oklch(from var(--lu-orange) calc(l - 0.05) c h); /** Dark uses an orange base here vs maroon in light. */
+  --accent-secondary-hover: oklch(from var(--lu-teal) calc(l + 0.1) c h);
+  --accent-tertiary-hover: oklch(from var(--lu-blue) calc(l + 0.12) c h);
+}
