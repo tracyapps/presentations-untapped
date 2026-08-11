@@ -110,5 +110,5 @@ export async function createDeckAction(
     return { error: "The deck could not be created. Check the details and try again." };
   }
 
-  redirect("/decks");
+  redirect(`/decks/${deckId}/edit/1`);
 }

@@ -117,13 +117,12 @@ export default function DeckDashboard({ decks }: { decks: DeckSummary[] }) {
 function DeckCard({ deck }: { deck: DeckSummary }) {
   return (
     <article className="deck-card">
-      <div className="deck-thumbnail" data-theme={deck.themeDefault} aria-hidden="true">
-        <span>{deck.title}</span>
-        <small>{deck.clientName}</small>
-      </div>
+      <Link className="deck-thumbnail" href={`/decks/${deck.id}/edit/1`} data-theme={deck.themeDefault} aria-label={`Edit ${deck.title}`}>
+        <span>{deck.title}</span><small>{deck.clientName}</small>
+      </Link>
       <div className="deck-card-body">
         <div className="deck-title-row">
-          <h3>{deck.title}</h3>
+          <h3><Link href={`/decks/${deck.id}/edit/1`}>{deck.title}</Link></h3>
           <span className={`status status-${deck.status}`}>{statusLabel[deck.status]}</span>
         </div>
         <p>{deck.eventName ?? deck.clientName} · {deck.slideCount} {deck.slideCount === 1 ? "slide" : "slides"}</p>
@@ -141,7 +140,7 @@ function DeckTable({ decks }: { decks: DeckSummary[] }) {
         <tbody>
           {decks.map((deck) => (
             <tr key={deck.id}>
-              <th scope="row"><span>{deck.title}</span>{deck.eventName && <small>{deck.eventName}</small>}</th>
+              <th scope="row"><span><Link href={`/decks/${deck.id}/edit/1`}>{deck.title}</Link></span>{deck.eventName && <small>{deck.eventName}</small>}</th>
               <td><span className={`status status-${deck.status}`}>{statusLabel[deck.status]}</span></td>
               <td>{deck.slideCount}</td>
               <td><time dateTime={deck.updatedAt}>{dateFormatter.format(new Date(deck.updatedAt))}</time></td>

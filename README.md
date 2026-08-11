@@ -10,9 +10,12 @@ See PLAN.md for the full technical plan, pitfalls, and timeline.
 - [x] Clerk keys, protected app routes, and `/sign-in` route wired
 - [x] Dashboard data, client grouping, search/sort, and grid/table views
 - [x] New deck flow for existing/new clients, optional events, and a starter slide
-- [ ] Editor shell and slide persistence (next milestone)
+- [x] Editor shell, visual/outline views, autosave, and conflict-safe slide persistence
+- [x] Content palette, visible block controls, safe layouts, and basic slide management
+- [ ] Block-specific property editors, rich-text toolbar, and drag-and-drop (next milestone)
 - [ ] Vercel Blob token and voiceover upload
-- [ ] Vercel deployment and public-deck DNS
+- [x] Initial Vercel deployment
+- [ ] Public-deck DNS
 
 The root directory is the product app. `clerk-nextjs/` is a standalone Clerk
 quickstart sample and is not used by the product build.
