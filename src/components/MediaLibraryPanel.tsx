@@ -25,10 +25,11 @@ type MediaLibraryPanelProps = {
   variant?: "compact" | "modal";
   onUploaded: (asset: MediaAsset) => void;
   onSelect: (asset: MediaAsset) => void;
+  onUseAsBackground?: (asset: MediaAsset) => void;
   onDelete?: (asset: MediaAsset) => Promise<boolean>;
 };
 
-export default function MediaLibraryPanel({ items, configured, loadError, selectedUrl, variant = "compact", onUploaded, onSelect, onDelete }: MediaLibraryPanelProps) {
+export default function MediaLibraryPanel({ items, configured, loadError, selectedUrl, variant = "compact", onUploaded, onSelect, onUseAsBackground, onDelete }: MediaLibraryPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -147,6 +148,7 @@ export default function MediaLibraryPanel({ items, configured, loadError, select
           <img src={item.url} alt="" draggable={false} />
           <span>{item.name}</span>
         </button>
+        {onUseAsBackground && <button type="button" className="media-item-background" aria-label={`Use ${item.name} as slide background`} onClick={() => onUseAsBackground(item)}>BG</button>}
         {onDelete && <button type="button" className="media-item-delete" aria-label={`Delete ${item.name} from media library`} disabled={!!deletingUrl} onClick={() => void deleteAsset(item)}>{deletingUrl === item.url ? "…" : "×"}</button>}
       </article>)}
       {configured && !items.length && !loadError && <p>No media uploaded yet.</p>}

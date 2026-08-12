@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteVoiceoverAction, saveCaptionCuesAction, saveVoiceoverAction } from "@/app/decks/[id]/edit/voiceover-actions";
 import VoiceoverPlayer from "@/components/VoiceoverPlayer";
 import audioPolicy from "@/lib/audio-policy.json";
+import { findPauseBoundaries, splitScriptIntoCaptions, timeCaptionScript } from "@/lib/caption-timing";
 import type { CaptionCue } from "@/lib/slides/types";
 import { validateCaptionCues, type VoiceoverData } from "@/lib/voiceover";
 
@@ -58,12 +59,15 @@ export default function VoiceoverEditor({ deckId, slideId, configured, initialVo
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const scriptInputRef = useRef<HTMLInputElement>(null);
   const [voiceover, setVoiceover] = useState(initialVoiceover);
   const [cues, setCues] = useState<CaptionCue[]>(initialVoiceover?.cues ?? []);
   const [playhead, setPlayhead] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [savingCues, setSavingCues] = useState(false);
+  const [script, setScript] = useState("");
+  const [timingScript, setTimingScript] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const cueErrors = voiceover ? validateCaptionCues(cues, voiceover.durationSec) : [];
@@ -162,6 +166,36 @@ export default function VoiceoverEditor({ deckId, slideId, configured, initialVo
     setCues((current) => [...current, { start, end, text: "" }].sort((a, b) => a.start - b.start));
   }
 
+  async function autoTimeScript() {
+    if (!voiceover) return;
+    const chunks = splitScriptIntoCaptions(script);
+    if (!chunks.length) {
+      setError("Paste a script before creating timed captions.");
+      return;
+    }
+    setTimingScript(true);
+    setError("");
+    setMessage("");
+    let context: AudioContext | null = null;
+    try {
+      const response = await fetch(voiceover.audioUrl);
+      if (!response.ok) throw new Error(`Audio fetch failed with ${response.status}`);
+      context = new AudioContext();
+      const buffer = await context.decodeAudioData(await response.arrayBuffer());
+      const channels = Array.from({ length: buffer.numberOfChannels }, (_, index) => buffer.getChannelData(index));
+      const pauses = findPauseBoundaries(channels, buffer.sampleRate);
+      setCues(timeCaptionScript(script, voiceover.durationSec, pauses));
+      setMessage(`Created ${chunks.length} caption cues using ${pauses.length} waveform pause${pauses.length === 1 ? "" : "s"}. Review and save when ready.`);
+    } catch (analysisError) {
+      console.error("Waveform caption timing failed", analysisError);
+      setCues(timeCaptionScript(script, voiceover.durationSec));
+      setMessage(`Created ${chunks.length} caption cues with proportional timing. The waveform could not be read, so review the timing before saving.`);
+    } finally {
+      if (context) await context.close();
+      setTimingScript(false);
+    }
+  }
+
   async function saveCues() {
     if (!voiceover || cueErrors.length) return;
     setSavingCues(true);
@@ -201,6 +235,17 @@ export default function VoiceoverEditor({ deckId, slideId, configured, initialVo
       <p className="eyebrow">Player preview</p>
       {voiceover ? <>
         <VoiceoverPlayer voiceover={{ ...voiceover, cues }} active={active} onTimeUpdate={updatePlayhead} />
+        <div className="caption-script-import">
+          <div><h2>Full script</h2><p>Paste narration or import a text file. We split it into captions and align boundaries to pauses in the audio waveform.</p></div>
+          <input ref={scriptInputRef} className="sr-only" type="file" accept=".txt,text/plain" onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            void file.text().then(setScript).catch(() => setError("The script file could not be read."));
+            event.currentTarget.value = "";
+          }} />
+          <textarea rows={6} value={script} onChange={(event) => setScript(event.target.value)} placeholder="Paste the complete voiceover script here…" />
+          <div><span>{script.trim() ? `${splitScriptIntoCaptions(script).length} estimated caption cues` : "No script loaded"}</span><button className="button button-secondary" type="button" onClick={() => scriptInputRef.current?.click()}>Import .txt</button><button className="button button-primary" type="button" disabled={!script.trim() || timingScript} onClick={() => void autoTimeScript()}>{timingScript ? "Reading waveform…" : "Auto-time script"}</button></div>
+        </div>
         <div className="caption-editor-heading">
           <div><h2>Caption cues</h2><p>Add cues at the current playhead, then adjust timing and text.</p></div>
           <button className="button button-secondary" type="button" onClick={addCue}>＋ Cue at {playhead.toFixed(1)}s</button>
@@ -213,7 +258,7 @@ export default function VoiceoverEditor({ deckId, slideId, configured, initialVo
             <label className="caption-cue-text"><small>Caption</small><input type="text" maxLength={1000} value={cue.text} onChange={(event) => updateCue(index, { text: event.target.value })} /></label>
             <button type="button" aria-label={`Delete cue ${index + 1}`} onClick={() => setCues((current) => current.filter((_, cueIndex) => cueIndex !== index))}>×</button>
           </div>)}
-          {!cues.length && <p className="caption-cues-empty">No captions yet. Play or seek the clip, then add a cue at the playhead.</p>}
+          {!cues.length && <p className="caption-cues-empty">No captions yet. Auto-time a full script above, or play and add cues manually at the playhead.</p>}
         </div>
         {cueErrors.length > 0 && <ul className="caption-errors" role="alert">{cueErrors.map((cueError) => <li key={cueError}>{cueError}</li>)}</ul>}
         <div className="caption-editor-actions"><span>{cuesDirty ? "Unsaved caption changes" : "Captions up to date"}</span><button className="button button-primary" type="button" disabled={!cuesDirty || !!cueErrors.length || savingCues} onClick={() => void saveCues()}>{savingCues ? "Saving…" : "Save captions"}</button></div>

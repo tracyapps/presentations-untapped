@@ -64,19 +64,24 @@ export function surfaceStyle(surface: SurfaceChoice | undefined, theme: "light" 
   return definition ? variables(definition[theme]) : undefined;
 }
 
-export function patternStyle(pattern: SlidePatternChoice | undefined): StyleVariables | undefined {
+export function patternStyle(pattern: SlidePatternChoice | undefined, theme: "light" | "dark"): StyleVariables | undefined {
   if (!pattern || pattern === "none") return undefined;
   const definition = PATTERNS.find((item) => item.key === pattern);
   if (!definition) return undefined;
-  const alpha = definition.scrimOpacity;
-  const scrim = `rgb(0 0 0 / ${alpha})`;
+  // The artwork is already authored on a high-contrast orange field. The old
+  // fixed 55% black scrim made every pattern look disabled, even in Present
+  // mode. Keep light mode vivid and use only a modest tonal shift for dark.
+  const scrim = theme === "dark" ? "rgb(36 5 1 / 0.28)" : "rgb(255 255 255 / 0)";
+  const foreground = theme === "dark" ? "#fff8f2" : definition.foreground;
+  const muted = theme === "dark" ? "#f0cfc8" : definition.muted;
+  const accent = theme === "dark" ? "#fcc40a" : definition.accent;
   return {
-    "--surface-fg": definition.foreground,
-    "--surface-muted": definition.muted,
-    "--surface-accent": definition.accent,
-    "--text-primary": definition.foreground,
-    "--text-secondary": definition.muted,
-    "--accent-primary": definition.accent,
+    "--surface-fg": foreground,
+    "--surface-muted": muted,
+    "--surface-accent": accent,
+    "--text-primary": foreground,
+    "--text-secondary": muted,
+    "--accent-primary": accent,
     "--bg-page": "#c04402",
     "--bg-surface": "rgb(0 0 0 / 0.28)",
     "--bg-surface-raised": "rgb(0 0 0 / 0.38)",
@@ -88,7 +93,7 @@ export function patternStyle(pattern: SlidePatternChoice | undefined): StyleVari
     backgroundPosition: "center",
     backgroundRepeat: "no-repeat",
     backgroundSize: "cover",
-    color: definition.foreground,
+    color: foreground,
   };
 }
 

@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "test:audio": "node scripts/check-audio-policy.mjs",
+    "test:captions": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-caption-timing.mjs",
     "test:media": "node scripts/check-media-policy.mjs",
     "test:styles": "node scripts/check-slide-styles.mjs",
     "start": "next start",

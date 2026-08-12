@@ -17,6 +17,8 @@ export type SlideCanvasEditor = {
   onSaveToLibrary: (node: Node) => void;
   onEditImage: (node: Extract<ContentNode, { type: "image" }>) => void;
   onAssignMedia: (id: string, asset: MediaAsset) => void;
+  onAddFloatingMedia: (asset: MediaAsset, position: { x: number; y: number }) => void;
+  onText: (id: string, text: string) => void;
   onSwapColumns: (node: LayoutNode) => void;
 };
 
@@ -31,12 +33,48 @@ function Rich({ value }: { value: RichText }) {
 }
 
 export default function SlideCanvas({ doc, theme, editor }: { doc: SlideDoc; theme: "light" | "dark"; editor?: SlideCanvasEditor }) {
+  const [mediaDragOver, setMediaDragOver] = useState(false);
   const dnd = useBlockDnd((sourceId, target) => editor?.onDrop(sourceId, target));
   const slideStyle = doc.style?.pattern && doc.style.pattern !== "none"
-    ? patternStyle(doc.style.pattern)
+    ? patternStyle(doc.style.pattern, theme)
     : surfaceStyle(doc.style?.surface, theme);
+  const backgroundImage = doc.style?.backgroundImage;
   return (
-    <div className={`slide-viewport${editor ? " is-editing" : ""}`} data-theme={theme} data-pattern={doc.style?.pattern ?? "none"} style={slideStyle}>
+    <div
+      className={`slide-viewport${editor ? " is-editing" : ""}${mediaDragOver ? " is-media-drop-target" : ""}`}
+      data-theme={theme}
+      data-pattern={doc.style?.pattern ?? "none"}
+      style={slideStyle}
+      onDragEnter={(event) => {
+        if (!editor || !hasMediaDrag(event.dataTransfer)) return;
+        event.preventDefault();
+        setMediaDragOver(true);
+      }}
+      onDragOver={(event) => {
+        if (!editor || !hasMediaDrag(event.dataTransfer)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDragLeave={(event) => {
+        if (event.relatedTarget instanceof HTMLElement && event.currentTarget.contains(event.relatedTarget)) return;
+        setMediaDragOver(false);
+      }}
+      onDrop={(event) => {
+        if (!editor) return;
+        const asset = readMediaDrag(event.dataTransfer);
+        if (!asset) return;
+        event.preventDefault();
+        setMediaDragOver(false);
+        const rect = event.currentTarget.getBoundingClientRect();
+        const x = Math.max(0, Math.min(72, ((event.clientX - rect.left) / rect.width) * 100 - 14));
+        const y = Math.max(0, Math.min(70, ((event.clientY - rect.top) / rect.height) * 100 - 12));
+        editor.onAddFloatingMedia(asset, { x, y });
+      }}
+    >
+      {backgroundImage?.src && <>
+        <div className="slide-background-image" aria-hidden="true" style={{ backgroundImage: `url(${JSON.stringify(backgroundImage.src)})`, backgroundPosition: backgroundImage.position ?? "center" }} />
+        <div className={`slide-background-overlay is-${backgroundImage.overlay ?? "soft"}`} aria-hidden="true" />
+      </>}
       {editor && <span className="slide-boundary-marker" aria-hidden="true">16:9 slide boundary</span>}
       {editor ? (
         <NodeList className="slide-canvas dnd-node-list-vertical" nodes={doc.blocks} parentId={null} axis="vertical" editor={editor} dnd={dnd} theme={theme} />
@@ -58,7 +96,8 @@ function NodeList({ className, nodes, parentId, axis, editor, dnd, style, theme 
         const after = { parentId, index: index + 1 };
         return (
           <div
-            className={`dnd-node-slot${isActiveTarget(dnd, before) ? " is-target-before" : ""}${index === nodes.length - 1 && isActiveTarget(dnd, after) ? " is-target-after" : ""}`}
+            className={`dnd-node-slot${isFloatingImage(node) ? " is-floating-slot" : ""}${isActiveTarget(dnd, before) ? " is-target-before" : ""}${index === nodes.length - 1 && isActiveTarget(dnd, after) ? " is-target-after" : ""}`}
+            style={isFloatingImage(node) ? floatingImageStyle(node) : undefined}
             key={node.id}
           >
             <BlockDropZone axis={axis} controller={dnd} target={before} />
@@ -76,7 +115,7 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
   const contentStyle = !isLayout(node) ? surfaceStyle(node.style?.surface, theme) : undefined;
   const rendered = isLayout(node)
     ? <RenderLayout node={node} theme={theme} editor={editor} dnd={dnd} />
-    : <div className={`slide-node-surface${contentStyle ? " has-surface" : ""}`} style={contentStyle}><RenderContent node={node} /></div>;
+    : <div className={`slide-node-surface${contentStyle ? " has-surface" : ""}${isFloatingImage(node) ? " is-floating-image" : ""}`} style={{ ...contentStyle, ...(!editor && isFloatingImage(node) ? floatingImageStyle(node) : undefined) }}><RenderContent node={node} onText={editor?.onText} /></div>;
   if (!editor) return rendered;
   return (
     <section
@@ -185,13 +224,39 @@ function RenderLayout({ node, theme, editor, dnd }: { node: LayoutNode; theme: "
   );
 }
 
-function RenderContent({ node }: { node: ContentNode }) {
+function editableText(value: RichText): string {
+  return value.map((part) => part.text).join("");
+}
+
+function InlineText({ value, onChange, className }: { value: RichText; onChange: (text: string) => void; className?: string }) {
+  return <span
+    className={`direct-text-editor${className ? ` ${className}` : ""}`}
+    contentEditable
+    suppressContentEditableWarning
+    spellCheck
+    onInput={(event) => onChange(event.currentTarget.textContent ?? "")}
+  >{editableText(value)}</span>;
+}
+
+function isFloatingImage(node: Node): node is Extract<ContentNode, { type: "image" }> {
+  return !isLayout(node) && node.type === "image" && node.props.placement === "floating";
+}
+
+function floatingImageStyle(node: Extract<ContentNode, { type: "image" }>): React.CSSProperties {
+  return {
+    left: `${Math.max(0, Math.min(90, node.props.x ?? 60))}%`,
+    top: `${Math.max(0, Math.min(85, node.props.y ?? 18))}%`,
+    width: `${Math.max(12, Math.min(100, node.props.width ?? 30))}%`,
+  };
+}
+
+function RenderContent({ node, onText }: { node: ContentNode; onText?: (id: string, text: string) => void }) {
   switch (node.type) {
-    case "title": return <h2 className="slide-title"><Rich value={node.props.text} /></h2>;
-    case "tagline": return <p className="slide-tagline"><Rich value={node.props.text} /></p>;
-    case "paragraph": return <p className="slide-paragraph"><Rich value={node.props.text} /></p>;
-    case "blockquote": return <blockquote><Rich value={node.props.text} />{node.props.attribution && <cite>{node.props.attribution}</cite>}</blockquote>;
-    case "callout": return <aside className={`slide-callout callout-${node.props.variant}`}><Rich value={node.props.text} /></aside>;
+    case "title": return <h2 className="slide-title">{onText ? <InlineText value={node.props.text} onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</h2>;
+    case "tagline": return <p className="slide-tagline">{onText ? <InlineText value={node.props.text} onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</p>;
+    case "paragraph": return <p className="slide-paragraph">{onText ? <InlineText value={node.props.text} onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</p>;
+    case "blockquote": return <blockquote>{onText ? <InlineText value={node.props.text} onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}{node.props.attribution && <cite>{node.props.attribution}</cite>}</blockquote>;
+    case "callout": return <aside className={`slide-callout callout-${node.props.variant}`}>{onText ? <InlineText value={node.props.text} onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</aside>;
     case "image": {
       const frame = frameByKey(node.props.frame);
       const frameStyle = frame ? { WebkitMaskImage: `url("${frame.asset}")`, maskImage: `url("${frame.asset}")` } : undefined;

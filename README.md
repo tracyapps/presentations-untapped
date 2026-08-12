@@ -17,10 +17,11 @@ _Last reconciled with the codebase: August 11, 2026._
 - [x] Content palette, visible block controls, safe layouts, and basic slide management
 - [x] Content property editors, cross-container drag-and-drop, ghost/drop indicators
 - [x] Save reusable block snapshots from the editor chrome
-- [x] Contrast-tested slide/block surfaces, fixed SVG themes, and LU image masks
+- [x] Contrast-tested slide/block surfaces, light/dark SVG themes, and LU image masks
 - [x] Searchable library palette insertion plus rename/delete management screen
 - [x] Reusable media library UI with drag/drop and drive browsing
 - [x] Full-screen media picker with reusable references, deletion, alt text, captions, and frames
+- [x] Floating image placement plus per-slide image backgrounds with crop/overlay controls
 - [x] Structural row/columns/group blocks plus column swapping
 - [x] Collapsible palettes with remembered state
 - [x] Editor-only 16:9 boundary with reachable overflow; natural-height Outline view
@@ -28,7 +29,7 @@ _Last reconciled with the codebase: August 11, 2026._
 - [x] Initial collateral-backed block inventory, process block, and timeline/process templates
 - [ ] Reconcile and finish the block/template inventory against representative pitch decks (next milestone)
 - [x] Connect Vercel Blob and pull its read/write token locally
-- [x] Per-slide voiceover upload, shared player, and manual caption cues
+- [x] Per-slide voiceover upload, shared player, manual cues, and waveform-assisted full-script timing
 - [x] Internal present mode with keyboard navigation, overview, themes, and full screen
 - [x] Initial Vercel deployment
 - [ ] Public-deck DNS
@@ -89,6 +90,7 @@ the previous Blob; caption cues remain in Neon with the voiceover record.
 ```bash
 npx tsc --noEmit
 npm run test:audio
+npm run test:captions
 npm run test:styles
 npm run test:media
 git diff --check

@@ -139,6 +139,31 @@ export const LAYOUTS: LayoutDef[] = [
     }),
     preview: `<svg viewBox="0 0 160 90"><rect x="14" y="16" width="62" height="58" rx="3"/><rect x="86" y="22" width="58" height="9" rx="2"/><rect x="86" y="40" width="58" height="4" rx="1"/><rect x="86" y="48" width="58" height="4" rx="1"/></svg>`,
   },
+  {
+    key: "floating-image",
+    name: "Floating Image",
+    build: () => ({
+      version: 1,
+      blocks: [
+        content("title", { text: t("Slide title") }),
+        content("paragraph", { text: t("Supporting copy with room for a freely placed image.") }),
+        content("image", { src: "", alt: "", placement: "floating", x: 62, y: 22, width: 30 }),
+      ],
+    }),
+    preview: `<svg viewBox="0 0 160 90"><rect x="16" y="15" width="72" height="9" rx="2"/><rect x="16" y="34" width="65" height="4" rx="1"/><rect x="16" y="42" width="52" height="4" rx="1"/><rect x="96" y="22" width="48" height="48" rx="5"/></svg>`,
+  },
+  {
+    key: "image-hero",
+    name: "Image Hero",
+    build: () => ({
+      version: 1,
+      blocks: [
+        content("image", { src: "", alt: "", placement: "floating", x: 5, y: 7, width: 90 }),
+        content("title", { text: t("A strong visual moment") }),
+      ],
+    }),
+    preview: `<svg viewBox="0 0 160 90"><rect x="8" y="8" width="144" height="74" rx="4"/><rect x="28" y="61" width="104" height="9" rx="2" fill="white"/></svg>`,
+  },
 ];
 
 export const layoutByKey = (key: string) => LAYOUTS.find((l) => l.key === key);

@@ -19,7 +19,7 @@ import { hasMediaDrag, readMediaDrag } from "@/lib/media-dnd";
 import { LAYOUTS, migrateToLayout } from "@/lib/slides/layouts";
 import { appendContent, appendLayout, cloneNode, createContentNode, deleteNode, duplicateNode, moveNode, moveNodeTo, swapLayoutChildren } from "@/lib/slides/editor";
 import { PATTERNS, SURFACES, type SlidePatternChoice, type SurfaceChoice } from "@/lib/slides/styles";
-import type { ContentNode, ContentProps, ContentType, LayoutNode, LayoutType, Node, RichText } from "@/lib/slides/types";
+import type { ContentNode, ContentProps, ContentType, LayoutNode, LayoutType, Node, RichText, SlideBackgroundImage, SlideDoc } from "@/lib/slides/types";
 import { findNode, isLayout } from "@/lib/slides/types";
 
 type Tab = "design" | "outline" | "voiceover";
@@ -87,6 +87,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   const [libraryTarget, setLibraryTarget] = useState<Node | null>(null);
   const [libraryName, setLibraryName] = useState("");
   const [mediaTargetId, setMediaTargetId] = useState<string | null>(null);
+  const [backgroundDragOver, setBackgroundDragOver] = useState(false);
   const [voiceoverDirty, setVoiceoverDirty] = useState(false);
   const [isAdding, startAdding] = useTransition();
   const [isSavingLibrary, startSavingLibrary] = useTransition();
@@ -209,15 +210,21 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     setDoc((current) => ({ ...current, blocks: replaceNode(current.blocks, id, update) }));
   }
 
-  function updateSlideDesign(update: { surface?: SurfaceChoice; pattern?: SlidePatternChoice }) {
+  function updateSlideDesign(update: Omit<Partial<NonNullable<SlideDoc["style"]>>, "backgroundImage"> & { backgroundImage?: SlideBackgroundImage | null }) {
     if (saveState !== "conflict") {
       setSaveState("dirty");
       setMessage("");
     }
     setDoc((current) => {
-      const style = { ...current.style, ...update };
+      const { backgroundImage, ...rest } = update;
+      const style: NonNullable<SlideDoc["style"]> = { ...current.style, ...rest };
+      if (backgroundImage !== undefined) {
+        if (backgroundImage) style.backgroundImage = backgroundImage;
+        else delete style.backgroundImage;
+      }
       if (!style.surface || style.surface === "inherit") delete style.surface;
       if (!style.pattern || style.pattern === "none") delete style.pattern;
+      if (!style.backgroundImage) delete style.backgroundImage;
       return { ...current, style: Object.keys(style).length ? style : undefined };
     });
   }
@@ -332,11 +339,19 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     markDoc(swapLayoutChildren(docRef.current, node.id));
   }
 
-  function addImageFromMedia(asset: MediaAsset) {
+  function addFloatingImageFromMedia(asset: MediaAsset, position = { x: 60, y: 18 }) {
     const image = createContentNode("image") as Extract<ContentNode, { type: "image" }>;
     const alt = asset.name.replace(/\.[^.]+$/, "").replaceAll("-", " ");
-    markDoc({ ...docRef.current, blocks: [...docRef.current.blocks, { ...image, props: { ...image.props, src: asset.url, alt } }] });
-    setLibraryNotice(`Added ${asset.name} to slide ${initialSlide.position}.`);
+    markDoc({ ...docRef.current, blocks: [...docRef.current.blocks, {
+      ...image,
+      props: { ...image.props, src: asset.url, alt, placement: "floating", x: position.x, y: position.y, width: 30 },
+    }] });
+    setLibraryNotice(`Added ${asset.name} as a floating image on slide ${initialSlide.position}.`);
+  }
+
+  function useMediaAsBackground(asset: MediaAsset) {
+    updateSlideDesign({ backgroundImage: { src: asset.url, position: "center", overlay: "soft" } });
+    setLibraryNotice(`Set ${asset.name} as the background for slide ${initialSlide.position}.`);
   }
 
   function addSlide() {
@@ -471,7 +486,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
                 </div>
               </PaletteSectionPanel>
               {tab === "design" && <PaletteSectionPanel id="design" label="Slide design" open={paletteState.design} onToggle={() => togglePaletteSection("design")}>
-                <p className="palette-help">Surface colors respond to the deck mode. SVG art uses a fixed, contrast-safe foreground.</p>
+                <p className="palette-help">Surfaces and SVG art both respond to the preview mode.</p>
                 <div className="preview-theme-toggle" role="group" aria-label="Preview color mode">
                   <span>Preview</span>
                   <button type="button" aria-pressed={previewTheme === "light"} onClick={() => setPreviewTheme("light")}>Light</button>
@@ -479,6 +494,32 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
                 </div>
                 <SurfaceSwatches value={doc.style?.surface ?? "inherit"} theme={previewTheme} includeInherit onChange={(surface) => updateSlideDesign({ surface })} />
                 <PatternSwatches value={doc.style?.pattern ?? "none"} onChange={(pattern) => updateSlideDesign({ pattern })} />
+                <p className="palette-subheading">Background image</p>
+                <div
+                  className={`slide-background-dropzone${backgroundDragOver ? " is-dragging" : ""}${doc.style?.backgroundImage?.src ? " has-image" : ""}`}
+                  onDragEnter={(event) => { if (hasMediaDrag(event.dataTransfer)) { event.preventDefault(); setBackgroundDragOver(true); } }}
+                  onDragOver={(event) => { if (hasMediaDrag(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } }}
+                  onDragLeave={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setBackgroundDragOver(false); }}
+                  onDrop={(event) => {
+                    const asset = readMediaDrag(event.dataTransfer);
+                    if (!asset) return;
+                    event.preventDefault();
+                    setBackgroundDragOver(false);
+                    useMediaAsBackground(asset);
+                  }}
+                >
+                  {doc.style?.backgroundImage?.src ? <>
+                    {/* Dynamic Blob URLs intentionally use a native image preview. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={doc.style.backgroundImage.src} alt="" />
+                    <span>Drop another image to replace</span>
+                  </> : <span>Drag media here to use it as the slide background</span>}
+                </div>
+                {doc.style?.backgroundImage?.src && <div className="slide-background-controls">
+                  <label>Crop<select value={doc.style.backgroundImage.position ?? "center"} onChange={(event) => updateSlideDesign({ backgroundImage: { ...doc.style!.backgroundImage!, position: event.target.value as SlideBackgroundImage["position"] } })}><option value="center">Center</option><option value="top">Top</option><option value="bottom">Bottom</option></select></label>
+                  <label>Text overlay<select value={doc.style.backgroundImage.overlay ?? "soft"} onChange={(event) => updateSlideDesign({ backgroundImage: { ...doc.style!.backgroundImage!, overlay: event.target.value as SlideBackgroundImage["overlay"] } })}><option value="none">None</option><option value="soft">Soft</option><option value="strong">Strong</option></select></label>
+                  <button type="button" onClick={() => updateSlideDesign({ backgroundImage: null })}>Remove</button>
+                </div>}
               </PaletteSectionPanel>}
               <PaletteSectionPanel id="content" label="Content" open={paletteState.content} onToggle={() => togglePaletteSection("content")}>
                 <p className="palette-subheading">Structure</p>
@@ -502,8 +543,8 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
                 </div>
               </PaletteSectionPanel>
               <PaletteSectionPanel id="media" label="Media" count={mediaItems.length} open={paletteState.media} onToggle={() => togglePaletteSection("media")}>
-                <p className="palette-help">Upload once, then reuse the image in any deck.</p>
-                <MediaLibraryPanel items={mediaItems} configured={mediaLibrary.configured} loadError={mediaLibrary.error} onUploaded={registerMedia} onSelect={addImageFromMedia} onDelete={deleteMediaAsset} />
+                <p className="palette-help">Click to add a floating image, drag onto the slide to place it, or drag into Background image above.</p>
+                <MediaLibraryPanel items={mediaItems} configured={mediaLibrary.configured} loadError={mediaLibrary.error} onUploaded={registerMedia} onSelect={addFloatingImageFromMedia} onUseAsBackground={useMediaAsBackground} onDelete={deleteMediaAsset} />
               </PaletteSectionPanel>
             </>
           )}
@@ -519,6 +560,8 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             onSaveToLibrary: openLibraryDialog,
             onEditImage: (node) => setMediaTargetId(node.id),
             onAssignMedia: assignMediaToImage,
+            onAddFloatingMedia: addFloatingImageFromMedia,
+            onText: updateText,
             onSwapColumns: swapColumns,
           }} /></div>}
           {tab === "outline" && <div className="outline-workspace"><OutlineTree nodes={doc.blocks} media={{ items: mediaItems, onOpen: setMediaTargetId, onAssign: assignMediaToImage }} onText={updateText} onUpdate={updateNode} onMove={dropBlock} onSwapColumns={(id) => markDoc(swapLayoutChildren(docRef.current, id))} /></div>}

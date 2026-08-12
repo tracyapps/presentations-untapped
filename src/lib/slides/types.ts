@@ -17,8 +17,15 @@ export type SlideDoc = {
   style?: {
     surface?: SurfaceChoice;
     pattern?: SlidePatternChoice;
+    backgroundImage?: SlideBackgroundImage;
   };
   blocks: Node[];
+};
+
+export type SlideBackgroundImage = {
+  src: string;
+  position?: "center" | "top" | "bottom";
+  overlay?: "none" | "soft" | "strong";
 };
 
 export type Node = LayoutNode | ContentNode;
@@ -61,7 +68,17 @@ export type ContentProps = {
   blockquote: { text: RichText; attribution?: string };
   callout:    { text: RichText; variant: "accent" | "teal" | "blue" };
   paragraph:  { text: RichText };
-  image:      { src: string; alt: string; caption?: string; decorative?: boolean; frame?: ImageFrameKey }; // alt required unless decorative
+  image:      {
+    src: string;
+    alt: string;
+    caption?: string;
+    decorative?: boolean;
+    frame?: ImageFrameKey;
+    placement?: "flow" | "floating";
+    x?: number;
+    y?: number;
+    width?: number;
+  }; // alt required unless decorative
   list:       { ordered: boolean; items: RichText[] };
   process:    {
     direction: "horizontal" | "vertical";

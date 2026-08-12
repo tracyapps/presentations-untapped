@@ -13,7 +13,7 @@ exist. The core editing foundation is working:
 
 - Dashboard, deck creation, slide add/duplicate/delete, and conflict-aware
   autosave.
-- Design, Outline, and placeholder Voiceover tabs over one JSON block tree.
+- Design, Outline, and Voiceover tabs over one JSON block tree.
 - Named slide layouts with loss confirmation, plus insertable row, columns, and
   group structures.
 - Drag/drop within and across containers, drag ghosting, insertion indicators,
@@ -29,17 +29,19 @@ exist. The core editing foundation is working:
 - Reusable media: upload by browse or file drop, assign existing media by drop,
   delete assets, and choose/edit an image in a full-screen media modal with alt
   text, decorative state, caption, and LU SVG frame.
+- Media can also be placed as floating slide objects or used as a full-slide
+  background with crop position and configurable readability overlay.
 - A provisional marketing-content inventory in `BLOCK-INVENTORY.md`, plus a
   reusable horizontal/vertical process block and matching Timeline/Process
   slide templates based on the available LU one-sheets.
 - Per-slide MP3/M4A/WAV upload and replacement, a shared keyboard-operable
-  player, Blob cleanup on replacement/deletion, and manually timed caption cues
-  with browser/server validation.
+  player, Blob cleanup on replacement/deletion, manually timed caption cues,
+  and full-script import with client-side waveform pause alignment.
 - Internal present mode for draft and later-stage decks: shared slide/player
   rendering, click/keyboard navigation, overview grid, persisted theme choice,
   full-screen support, and reduced-motion handling.
-- Contrast-checked responsive surfaces, three fixed SVG slide patterns, and 18
-  LU image masks.
+- Contrast-checked responsive surfaces, three light/dark responsive SVG slide
+  patterns without the old dimming scrim, and 18 LU image masks.
 
 ## Uncommitted working tree
 
@@ -110,12 +112,13 @@ Most recent focused checks passed:
 ```bash
 npx tsc --noEmit
 npm run test:audio    # formats, 25 MB limit, prefix, package, env contract
+npm run test:captions # script splitting, waveform pause detection, cue timing
 npm run test:styles   # 63 readable pairs, 3 SVG themes, 18 masks
 npm run test:media    # formats, size, prefix, package, env contract
 git diff --check
 ```
 
-Chrome verification covered media reuse/deletion/modal editing, nested
-cross-container dragging, column swapping, editor overflow reachability, and the
-content-only natural-height Outline view. Run a production build only with the
-dev server stopped; the last isolated build passed on August 11.
+Chrome verification also covers direct Design-mode text editing, SVG theme
+switching, floating/background image placement, new image layouts, and the
+full-script voiceover input. Run a production build only with the dev server
+stopped; the last isolated build passed on August 11.

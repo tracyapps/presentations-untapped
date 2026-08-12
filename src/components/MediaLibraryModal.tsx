@@ -100,6 +100,12 @@ export default function MediaLibraryModal({ image, items, configured, loadError,
             <label>Alt text<input type="text" value={draft.alt} disabled={draft.decorative} onChange={(event) => setDraft((current) => ({ ...current, alt: event.target.value }))} /></label>
             <label className="outline-check"><input type="checkbox" checked={draft.decorative ?? false} onChange={(event) => setDraft((current) => ({ ...current, decorative: event.target.checked }))} />Decorative image</label>
             <label>Caption<textarea rows={3} value={draft.caption ?? ""} onChange={(event) => setDraft((current) => ({ ...current, caption: event.target.value }))} placeholder="Optional caption shown below the image" /></label>
+            <label className="outline-check"><input type="checkbox" checked={draft.placement === "floating"} onChange={(event) => setDraft((current) => ({ ...current, placement: event.target.checked ? "floating" : "flow", x: current.x ?? 60, y: current.y ?? 18, width: current.width ?? 30 }))} />Float image on slide</label>
+            {draft.placement === "floating" && <div className="floating-image-controls">
+              <label>Horizontal <input type="range" min={0} max={88} step={1} value={draft.x ?? 60} onChange={(event) => setDraft((current) => ({ ...current, x: Number(event.target.value) }))} /></label>
+              <label>Vertical <input type="range" min={0} max={82} step={1} value={draft.y ?? 18} onChange={(event) => setDraft((current) => ({ ...current, y: Number(event.target.value) }))} /></label>
+              <label>Width <input type="range" min={12} max={100} step={1} value={draft.width ?? 30} onChange={(event) => setDraft((current) => ({ ...current, width: Number(event.target.value) }))} /></label>
+            </div>}
             <ImageFramePicker value={draft.frame} onChange={(frameKey) => setDraft((current) => ({ ...current, frame: frameKey }))} />
           </aside>
         </div>

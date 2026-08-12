@@ -142,13 +142,13 @@ Grid (thumbnail cards) and table (list) views, toggle persisted per user (localS
 
 **Shared chrome (implemented):** tabs (Design / Outline / Voiceover), "editing slide N of M", add/duplicate/delete slide controls, slide strip/switcher, collapsible Layout/Content/Library/Media palettes with local remembered state, Save + Close, a diff-derived save-state indicator, autosave debounced two seconds after the last change, a disabled Save button when clean, conflict detection, and a `beforeunload` guard when dirty.
 
-**Design view (implemented foundation):** left panel = visual layouts, structural blocks, content blocks, slide design, reusable library, and reusable media. Right = a responsive 16:9 slide boundary. Normal preview/presentation rendering clips to that boundary; editor rendering exposes overflowing blocks below it and lets the page scroll so every block remains reachable. Blocks can move within and across row/column/group containers with a ghost state and highlighted insertion line.
+**Design view (implemented foundation):** left panel = visual layouts, structural blocks, content blocks, slide design, reusable library, and reusable media. Right = a responsive 16:9 slide boundary. Normal preview/presentation rendering clips to that boundary; editor rendering exposes overflowing blocks below it and lets the page scroll so every block remains reachable. Standard text blocks edit directly on canvas. Blocks can move within and across row/column/group containers with a ghost state and highlighted insertion line.
 
 Every block gets **always-visible chrome** (req #14): a thin outline + mini header bar with a drag-only region, block name, move up/down, duplicate, save to library, and delete controls. Column layouts also expose Swap Columns. Custom edge-aware tooltips can render emphasized shortcut hints later. Blocks remain focusable and visible move buttons provide the non-drag fallback.
 
 **Outline view (req #19, implemented foundation):** same structural/content/library/media palette; Slide Design is hidden. The right side renders the same tree as natural-height nested labeled boxes with plain content fields, media/accessibility details, drag/drop, and column swapping. All surfaces, image frames, callout color variants, and rich-text formatting controls are intentionally excluded so Outline stays focused on content and structure. Existing design data is preserved when content changes, so toggling remains lossless.
 
-**Voiceover view (req #21, implemented):** left = upload zone (mp3/m4a/wav, 25MB cap) + clip info + delete/replace; right = the reusable player preview plus the **caption cue editor**: rows of start / end / text fields, a "＋ cue at playhead" button, and client/server validation for empty text, overlaps, ordering, and clip bounds. This *is* the manual transcription editor (auto-transcription later feeds the same rows).
+**Voiceover view (req #21, implemented):** left = upload zone (mp3/m4a/wav, 25MB cap) + clip info + delete/replace; right = the reusable player preview plus the **caption cue editor**: rows of start / end / text fields, a "＋ cue at playhead" button, and client/server validation for empty text, overlaps, ordering, and clip bounds. A full narration script can be pasted or imported from `.txt`; the browser reads the decoded waveform, detects meaningful pauses, and uses the closest pauses to seed non-overlapping cue timing, with proportional timing as a fallback. Generated cues remain editable and require an explicit save.
 
 ### 5.3 Voiceover player (req #4, implemented) — one component reused in editor preview, present mode, and public decks
 Big circular play button showing clip length → expands to transport: play/pause, back 10s, forward 10s, seekable timeline (a real `<input type=range>` — accessible by default), current/total time, CC toggle. Captions render in a live region below the slide, styled by tokens. `<audio preload="metadata">`, keyboard operable, visible focus states.
@@ -164,7 +164,9 @@ file drag/drop, reuse, and deletion. Dragging an existing library asset onto an
 image block assigns the existing URL rather than re-uploading it. Clicking an
 image opens a full-screen media picker containing upload + library views, alt
 text, decorative state, optional caption, and LU SVG frame selection. Deleting
-an asset warns that existing slide references will stop rendering it.
+an asset warns that existing slide references will stop rendering it. Media can
+also be dropped on the canvas as a floating image with editable position/width,
+or assigned as the slide background with crop and readability-overlay controls.
 
 ### 5.6 Present mode (req #3, implemented)
 Dead simple: full-screen slide (Fullscreen API + fallback), ← → / space / click to advance, `Esc`/`G` for **overview grid** (all slides, click to jump), slide counter, persisted deck-specific theme toggle, and the shared voiceover player when present. It reuses `SlideCanvas`, respects `prefers-reduced-motion`, and works for internal drafts. The future public route can reuse the same presenter without teaching clients a second interface.
@@ -225,7 +227,7 @@ One-time setup, ~10 minutes, then publishing is fully automatic forever:
 | Complete | Dashboard, deck creation, slide persistence/management, editor shell, layouts, autosave | Client settings/CRUD beyond deck creation is still planned |
 | Complete | Nested block editor, cross-container DnD, Outline, block library, media library, slide styles, SVG themes/masks | More real-world block/template coverage is needed |
 | **Next** | Audit collected marketing decks and implement the prioritized reusable block/template set | Keep content-model additions compatible with Design, Outline, library snapshots, and future present mode |
-| Complete | Voiceover upload, player, and manual caption cues | Uses the existing `voiceovers` schema and isolated Vercel Blob audio policy |
+| Complete | Voiceover upload, player, manual cues, and waveform-assisted script timing | Uses the existing `voiceovers` schema and isolated Vercel Blob audio policy |
 | In progress | MVP finish: review/status flow, public approved-deck route, DNS, end-to-end accessibility pass | Internal present mode is complete; keep public routes logged-out accessible |
 | Post-MVP | Comments, client settings, merge tags, recording/transcription, analytics, PDF export | See parking lot below |
 
