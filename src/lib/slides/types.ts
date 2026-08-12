@@ -32,6 +32,24 @@ export type SlideBackgroundImage = {
 
 export type Node = LayoutNode | ContentNode;
 
+/* -------------------------- Library link -------------------------- */
+
+/**
+ * Present on the ROOT node of a subtree inserted from the block library; its
+ * children are plain nodes and act as the cached snapshot.
+ *
+ * Resolution is on load: if the library item's version is higher, the subtree is
+ * replaced from the library; if the item is gone, the link is stripped and the
+ * stored subtree survives as a normal block. A deleted library item can never
+ * blank out a slide in front of a client (LIBRARIES.md §5.2).
+ */
+export type NodeLink = {
+  itemId: string;      // library_items.id
+  version: number;     // library version at last sync
+  variantId?: string;  // v2 — reserved
+  locked?: boolean;    // v2 — reserved, mirrors library_items.locked
+};
+
 /* ----------------------------- Layout ----------------------------- */
 
 export type LayoutType = "row" | "columns" | "grid" | "group";
@@ -46,6 +64,7 @@ export type LayoutNode = {
     align?: "start" | "center" | "end" | "stretch";
   };
   style?: { surface?: SurfaceChoice };
+  link?: NodeLink;
   children: Node[];
 };
 
@@ -62,6 +81,12 @@ export type RichText = Array<{
   italic?: boolean;
   underline?: boolean;
   size?: "sm" | "md" | "lg"; // relative step, resolved by each block's own scale
+  /** Set only by the variable resolver in "edit" mode so the editor can render
+   *  the span as a chip. Never authored, never persisted — stored text keeps the
+   *  literal `{{company.name}}` (LIBRARIES.md §7.2). */
+  variable?: string;
+  variableLabel?: string;
+  unresolved?: boolean;
 }>;
 
 export type ContentProps = {
@@ -106,6 +131,7 @@ export type ContentNode = {
     type: T;
     props: ContentProps[T];
     style?: { surface?: SurfaceChoice };
+    link?: NodeLink;
   };
 }[ContentType];
 
@@ -135,4 +161,19 @@ export function findNode(doc: SlideDoc, id: NodeId): Node | null {
   let found: Node | null = null;
   walk(doc.blocks, (n) => { if (n.id === id) found = n; });
   return found;
+}
+
+/** Every library item this document links to, deduped. One query, not N. */
+export function collectLinkedItemIds(doc: SlideDoc): string[] {
+  const ids = new Set<string>();
+  walk(doc.blocks, (n) => { if (n.link) ids.add(n.link.itemId); });
+  return [...ids];
+}
+
+/** Strips the library link from a node and returns its children as plain
+ *  blocks — the "Detach into blocks" action (LIBRARIES.md §5.3). */
+export function detachLink(node: Node): Node {
+  const { link: _link, ...rest } = node;
+  void _link;
+  return rest as Node;
 }

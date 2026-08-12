@@ -3,8 +3,78 @@
 _Snapshot: August 12, 2026 · branch `main` · commit `cb40de8` (`image bug fixes`)_
 
 Read this file first when opening a new development session. `README.md` is the
-setup/status overview; `PLAN.md` is the longer product and technical direction.
+setup/status overview; `PLAN.md` is the longer product and technical direction;
+**`LIBRARIES.md` is the plan of record for the reusable-component work** —
+companies, the three libraries, linked blocks, the shared library shell, and
+variables. It supersedes `PLAN.md` §5.4 and §5.9.
 Feature work through this checkpoint is committed and pushed to `main`.
+
+## ⚠️ Pick up here — `LIBRARIES.md` steps 1–4 landed
+
+Schema migration has been generated and pushed. Steps 1–4 of the `LIBRARIES.md`
+§9 sequence are done; `npx tsc --noEmit` is clean and all **eight** test scripts
+pass (`test:variables` is new).
+
+**Two things to run before using the new pages:**
+
+```bash
+npm run db:backfill          # dry run — prints exactly what it would write
+npm run db:backfill:apply    # writes media_assets rows + primary contacts
+```
+
+The media library is DB-backed now, so until the backfill runs it will look
+empty even though the Blob assets are all still there. The script is idempotent
+and deletes nothing.
+
+**Also:** `src/components/LibraryManager.tsx` is now unreferenced — `/library`
+renders `components/library/BlockLibrary.tsx` instead. Delete it (the sandbox
+could not).
+
+### What landed
+
+**Foundation**
+
+- `src/lib/db/schema.ts` — `company_contacts`, `media_assets`, `tags`,
+  `taggings`, `favorites`, `variables`, `user_roles`; `library_items` gains
+  status/approval/lock/version/parent; `clients` gains logo set, brand, and CRM
+  id columns; `slides` gains `library_item_id`; `comments` generalized to
+  `subject_type`/`subject_id`.
+- `src/lib/slides/types.ts` — `NodeLink` on every node, `collectLinkedItemIds`,
+  `detachLink`, variable-chip fields on `RichText`.
+- `src/lib/auth/policy.ts` — `can()` returns true for everything;
+  `PERMISSIONS_OPEN = false` is the entire v2 switch. Every server action already
+  calls it.
+- `src/lib/variables.ts` — resolver for `{{company.name}}`. Guarantees raw braces
+  and empty strings never reach a client. `npm run test:variables`.
+- `scripts/backfill-libraries.mjs` — dry-run-by-default backfill.
+
+**Shared shell** — `src/components/library/`
+
+- `LibraryShell.tsx` owns search, filters, sort, view mode, selection,
+  range-select, bulk actions, URL sync, and every empty state. Libraries supply
+  only `renderView` and their filters/sorts/actions.
+- `FilterMenu.tsx` — one filter popover, real fieldset of real inputs.
+- `types.ts` — the contract. Read this before adding the next library.
+- State placement: search/filters/sort in the URL (shareable, back-button
+  works), view mode in localStorage per library, selection never persisted.
+- Bulk-action buttons use `aria-disabled` rather than `disabled` on purpose —
+  a `disabled` button leaves the tab order, so the reason attached to it could
+  never be reached. The click handler enforces the block.
+
+**Block library** — `/library` rebuilt on the shell with grid and list views,
+status/category/tag/type/flag filters, four sorts, bulk approve/draft/
+categorize/tag/delete, per-user favorites, and usage counts (`Used in N decks`,
+computed with `jsonb_path_query` over the slide trees).
+
+### Next
+
+`LIBRARIES.md` §9 step 5 — the media library on the shell, then companies (6),
+linked blocks (7), the slide library (8), and variables in the editor (9).
+
+Two shortcuts taken in the block library that should be replaced when the shared
+`SaveToLibraryDialog` (§6.1) is built: the Categorize and Tag bulk actions use
+`window.prompt`, and single-item delete uses `window.confirm`. They work and are
+keyboard-accessible, but they are not the designed interaction.
 
 ## Current product state
 

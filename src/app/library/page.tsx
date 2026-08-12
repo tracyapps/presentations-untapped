@@ -1,25 +1,40 @@
 import Link from "next/link";
+import { auth } from "@clerk/nextjs/server";
 import AppHeader from "@/components/AppHeader";
-import LibraryManager from "@/components/LibraryManager";
+import BlockLibrary from "@/components/library/BlockLibrary";
 import { getBlockLibraryItems } from "@/lib/data/library";
+import { getTagsForSubject } from "@/lib/data/taxonomy";
 
 export const dynamic = "force-dynamic";
 
 export default async function LibraryPage() {
-  const items = await getBlockLibraryItems();
+  const { userId } = await auth();
+  const [items, allTags] = await Promise.all([
+    getBlockLibraryItems(userId ?? undefined),
+    getTagsForSubject("library_item"),
+  ]);
+
+  // Counts come from the items actually on the page rather than from the tag
+  // table, so a filter never offers an option that returns nothing.
+  const used = (id: string) => items.filter((item) =>
+    item.category?.id === id || item.tags.some((tag) => tag.id === id)).length;
+
+  const categories = allTags.filter((tag) => tag.kind === "category")
+    .map((tag) => ({ id: tag.id, name: tag.name, count: used(tag.id) }))
+    .filter((tag) => tag.count > 0);
+
+  const tagOptions = allTags.filter((tag) => tag.kind === "tag")
+    .map((tag) => ({ id: tag.id, name: tag.name, count: used(tag.id) }))
+    .filter((tag) => tag.count > 0);
 
   return (
     <main className="app-shell">
       <AppHeader />
-      <section className="page-heading">
-        <div>
-          <p className="eyebrow">Reusable content</p>
-          <h1>Library</h1>
-          <p>Find, rename, and remove saved block snapshots.</p>
-        </div>
-        <Link className="button button-secondary" href="/decks">Back to decks</Link>
-      </section>
-      <LibraryManager initialItems={items} />
+      <nav className="lib-nav" aria-label="Libraries">
+        <Link href="/library" aria-current="page">Content blocks</Link>
+        <Link href="/decks">Back to decks</Link>
+      </nav>
+      <BlockLibrary items={items} categories={categories} tagOptions={tagOptions} />
     </main>
   );
 }

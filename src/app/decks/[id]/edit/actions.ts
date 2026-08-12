@@ -66,16 +66,33 @@ export async function saveBlockToLibraryAction(input: {
       name,
       payload: input.node,
       createdBy: userId,
-    }).returning({ id: libraryItems.id, createdAt: libraryItems.createdAt, updatedAt: libraryItems.updatedAt });
+    }).returning({
+      id: libraryItems.id, createdAt: libraryItems.createdAt, updatedAt: libraryItems.updatedAt,
+      status: libraryItems.status, version: libraryItems.version, locked: libraryItems.locked,
+    });
     revalidatePath("/library");
     return {
       status: "saved",
       item: {
         id: saved.id,
         name,
+        description: null,
         node: input.node,
+        // A block saved mid-deck starts as a draft and untagged; the shared save
+        // dialog offers metadata but never blocks on it (LIBRARIES.md §6.1).
+        status: saved.status,
+        version: saved.version,
+        locked: saved.locked,
+        approvedBy: null,
+        approvedAt: null,
+        createdBy: userId,
+        updatedBy: null,
         createdAt: saved.createdAt.toISOString(),
         updatedAt: saved.updatedAt.toISOString(),
+        tags: [],
+        category: null,
+        favorited: false,
+        usageCount: 0,
       },
     };
   } catch (error) {
