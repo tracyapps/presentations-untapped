@@ -352,7 +352,7 @@ button, select { cursor: pointer; }
    so "this is a panel header" reads the same everywhere: thin, accent-tinted,
    small uppercase label. It is a label, not a control — collapsing happens on
    the tab hanging off the panel edge. */
-.resource-palette-topbar { position: sticky; top: calc(var(--space-4) * -1); z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 26px; margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) 0; padding: 0 var(--space-2) 0 var(--space-3); background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-surface)); border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent); }
+.resource-palette-topbar { position: sticky; top: calc(var(--space-4) * -1); z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 26px; margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) 0; padding: 0 var(--space-2) 0 var(--space-3); transition: opacity var(--duration-fast) var(--ease-out); background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-surface)); border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent); }
 .resource-palette-topbar > div { min-width: 0; display: flex; align-items: baseline; gap: var(--space-2); }
 .resource-palette-topbar strong { color: var(--accent-primary); font: var(--text-caption); font-weight: 850; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
 .resource-palette-topbar span { overflow: hidden; color: var(--text-secondary); font: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
@@ -361,13 +361,23 @@ button, select { cursor: pointer; }
 .resource-palette-topbar-actions .panel-add-button { width: 26px; height: 26px; background: var(--accent-primary); color: var(--text-on-accent); border-radius: var(--radius-pill); font-size: 1.05rem; box-shadow: var(--shadow-sm); }
 .resource-palette-topbar-actions .panel-add-button:disabled { opacity: 0.58; }
 .resource-palette-topbar-actions .panel-hide-button { width: 26px; height: 32px; background: transparent; color: var(--text-secondary); border-radius: var(--radius-sm); font-size: 1.15rem; }
-.panel-rail-header { display: flex; align-items: center; min-height: 26px; margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) 0; padding: 0 var(--space-3); background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-surface)); color: var(--accent-primary); border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent); font: var(--text-caption); font-weight: 850; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+/* Extra left padding so the neighbouring panel's tab, which overhangs into
+   this one, never covers the label. */
+.panel-rail-header { display: flex; align-items: center; min-height: 26px; margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) 0; padding: 0 var(--space-3) 0 var(--space-8); background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-surface)); color: var(--accent-primary); border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent); font: var(--text-caption); font-weight: 850; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
 
 /* Collapse tabs hang off the workspace edge. A collapsed panel leaves its tab
    behind, so reopening is one click exactly where the panel was — no hunting
    in a toolbar for which icon corresponds to which panel. */
-.panel-tabs { position: absolute; z-index: 6; top: var(--space-3); left: 0; display: grid; gap: var(--space-1); }
-.panel-tab { display: flex; align-items: center; gap: var(--space-1); min-height: 26px; padding: 0 var(--space-2); background: var(--bg-surface); color: var(--text-secondary); border: 1px solid var(--border-default); border-left: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; box-shadow: var(--shadow-sm); }
+/* Each tab is pinned to its panel's own outer (right) edge, positioned from the
+   same width variables the grid uses. Collapsing a panel sets its width to 0, so
+   the tab slides left with it — the panel slides off, the pull tab stays. That
+   is why the tab is not in the header toolbar: it is always exactly where its
+   panel is, open or closed. */
+.panel-tabs { position: absolute; z-index: 6; top: var(--space-3); left: 0; right: 0; height: 0; pointer-events: none; }
+.panel-tab { position: absolute; pointer-events: auto; display: flex; align-items: center; gap: var(--space-1); min-height: 26px; padding: 0 var(--space-2); background: var(--bg-surface); color: var(--text-secondary); border: 1px solid var(--border-default); border-left: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; box-shadow: var(--shadow-sm); transition: left var(--duration-base) var(--ease-out); }
+.panel-tab[data-panel="resource"] { left: var(--editor-resource-width); }
+.panel-tab[data-panel="inspector"] { left: calc(var(--editor-resource-width) + var(--editor-inspector-width)); }
+@media (prefers-reduced-motion: reduce) { .panel-tab { transition: none; } }
 .panel-tab:hover { color: var(--accent-primary); border-color: var(--accent-primary); }
 .panel-tab[aria-expanded="true"] { background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-surface)); color: var(--accent-primary); border-color: color-mix(in srgb, var(--accent-primary) 40%, transparent); }
 /* Open panels only need the chevron; the word is for finding a closed one. */
@@ -899,10 +909,14 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
      same slide identically at any size. Before this, type was sized in `rem`
      and `vw`, so text was pinned to the browser window: the same deck looked
      completely different in the editor and on screen, and thumbnails came out
-     with unreadable, oversized text. */
+     with unreadable, oversized text.
+
+     The base `cqw` font size is set on .slide-canvas and .slide-float-layer,
+     NOT here: container units used in a container's *own* styles resolve
+     against an ancestor container, and with none they fall back to the small
+     viewport — i.e. silently behave like `vw`. That is exactly the bug this was
+     meant to fix, so the base has to be read by a child. */
   container-type: inline-size;
-  /* One knob for the whole slide's type scale; every block sizes in `em`. */
-  font-size: 1.9cqw;
   position: relative;
   aspect-ratio: 16 / 9;
   overflow: hidden;
@@ -953,7 +967,8 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
   overflow: visible;
 }
 
-.slide-canvas { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 3.2%; padding: 6%; }
+/* The slide type scale. One knob for everything inside; blocks size in `em`. */
+.slide-canvas { font-size: 1.9cqw; position: relative; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 3.2%; padding: 6%; }
 .slide-node-surface { min-width: 0; height: 100%; }
 .slide-node-surface.has-surface, .slide-layout.has-surface { padding: 4%; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: var(--radius-md); }
 .slide-title { font-family: var(--font-display); font-size: 2.35em; font-weight: 800; line-height: 1.05; letter-spacing: var(--tracking-display); }
@@ -1050,7 +1065,7 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 /* No padding: absolute children resolve against the padding box either way, and
    present mode measured against the full canvas box. Adding inset here would
    silently shift every existing floating image. */
-.slide-float-layer { position: absolute; z-index: 8; inset: 0; pointer-events: none; }
+.slide-float-layer { font-size: 1.9cqw; position: absolute; z-index: 8; inset: 0; pointer-events: none; }
 .slide-float-layer > * { pointer-events: auto; }
 .slide-viewport.is-editing > .slide-float-layer { z-index: 9; }
 /* Geometry is applied inline to whichever element is this layer's direct child.
@@ -1098,6 +1113,26 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
   .media-modal-body[data-view="edit"] .media-modal-preview[data-stage] { height: 100%; }
   .media-modal-body[data-view="edit"] .media-modal-controls { height: auto; overflow: visible; }
 }
+
+
+/* --- Add slide: split button + layout menu ----------------------------
+   "Add slide" opens a real picker because choosing a layout is a considered
+   decision; "Quick add" repeats the last layout in one click. Labels wrap to
+   one word per line by design, so line-height is pulled in — the default would
+   leave the two lines looking like separate controls. */
+.add-slide-split { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.add-slide-split button { min-height: 46px; padding: var(--space-2); border: 1px solid var(--accent-primary); font: var(--text-caption); font-weight: 800; line-height: 0.95; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.add-slide-main { background: var(--accent-primary); color: var(--text-on-accent); border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.add-slide-main:hover:not(:disabled) { background: var(--accent-primary-hover); }
+.add-slide-quick { background: transparent; color: var(--accent-primary); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.add-slide-quick:hover:not(:disabled) { background: var(--bg-accent-soft); }
+.add-slide-split button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.add-slide-menu { display: grid; gap: var(--space-3); padding: var(--space-3); background: var(--bg-page); border: 1px solid var(--accent-primary); border-radius: var(--radius-sm); }
+.add-slide-menu-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.add-slide-menu-head strong { color: var(--text-secondary); font: var(--text-caption); font-weight: 850; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.add-slide-cancel { padding: var(--space-2); background: transparent; color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; }
+.add-slide-cancel:hover { color: var(--text-primary); border-color: var(--border-strong); }
 
 /* --- Per-block settings (spacing, alignment, width, background) --------
    Only images move freely on a slide; everything else stays in the flow on
@@ -1309,8 +1344,16 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 
 /* --- Internal presentation mode --- */
 .present-shell { position: fixed; inset: 0; z-index: 2000; overflow: hidden; background: var(--bg-page); color: var(--text-primary); }
-.present-stage { min-height: 100dvh; display: grid; place-items: center; padding: 5rem 2.5rem 6.5rem; }
-.present-slide-stack { width: min(calc(100vw - 5rem), calc(177.778dvh - 21.333rem), 1600px); display: grid; gap: var(--space-3); }
+/* Fill the screen. The old rule reserved 5rem top / 6.5rem bottom for the
+   overlay chrome and then capped the slide at 1600px, so on a large monitor
+   most of the screen was empty. The controls are fixed overlays and do not need
+   reserved space, and a slide has no reason to stop growing. */
+.present-stage { min-height: 100dvh; display: grid; place-items: center; padding: var(--space-3); }
+/* Whichever of width-limited or height-limited binds first, with a small
+   allowance so the fixed controls never sit on top of the slide edge. */
+.present-slide-stack { width: min(calc(100vw - (2 * var(--space-3))), calc((100dvh - 5.5rem) * 16 / 9)); display: grid; gap: var(--space-2); }
+/* With a voiceover the stack is taller, so the slide has to give a little back. */
+.present-slide-stack:has(.present-voiceover) { width: min(calc(100vw - (2 * var(--space-3))), calc((100dvh - 11rem) * 16 / 9)); }
 .present-slide-click-target { cursor: pointer; }
 .present-slide-click-target > .slide-viewport { width: 100%; }
 .present-voiceover { width: min(760px, 100%); margin: 0 auto; }

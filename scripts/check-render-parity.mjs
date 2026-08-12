@@ -47,10 +47,13 @@ assert.ok(!/padding/.test(layerRule[1]),
 
 // A fixed ratio in CSS silently overrides the image's real one, which is how
 // edit mode ended up showing differently-shaped images than present mode.
-const floatCss = css.slice(css.indexOf(".slide-float-layer"));
-const floatBlock = floatCss.slice(0, floatCss.indexOf("\n\n\n") + 1 || 2000);
-assert.ok(!/aspect-ratio:\s*\d/.test(floatBlock),
-  "no hardcoded aspect-ratio may apply to floating images — the node's own ratio must win");
+// Checked per-rule by selector rather than by slicing the file, so unrelated
+// rules moving around cannot make this pass or fail by accident.
+const floatRules = css.split("\n").filter((line) => /^\.[^{]*(float|floating)[^{]*\{/i.test(line));
+assert.ok(floatRules.length > 0, "expected rules targeting the float layer");
+const hardcodedRatio = floatRules.filter((line) => /aspect-ratio:\s*[\d.]/.test(line));
+assert.equal(hardcodedRatio.length, 0,
+  `no hardcoded aspect-ratio may apply to floating images:\n${hardcodedRatio.join("\n")}`);
 
 /* --- 4. The old slot positioning is gone ------------------------------ */
 
@@ -82,8 +85,19 @@ const viewportRule = css.match(/^\.slide-viewport \{([\s\S]*?)^\}/m);
 assert.ok(viewportRule, ".slide-viewport rule not found");
 assert.ok(/container-type:\s*inline-size/.test(viewportRule[1]),
   ".slide-viewport must be a size container so slide content can size in cqw");
-assert.ok(/font-size:\s*[\d.]+cqw/.test(viewportRule[1]),
-  ".slide-viewport must set a cqw base font size — the whole slide type scale hangs off it");
+// The base font size must live on a CHILD of the container. Container units in
+// a container's own styles resolve against an ancestor container and, with
+// none, fall back to the small viewport — silently behaving like `vw`, which is
+// the exact bug this was meant to fix.
+assert.ok(!/font-size:\s*[\d.]+cq/.test(viewportRule[1]),
+  ".slide-viewport must not size itself in container units — they resolve against an ancestor, not itself");
+for (const selector of [".slide-canvas", ".slide-float-layer"]) {
+  // Anchored: ".slide-nav-preview .slide-canvas {" contains ".slide-canvas {"
+  // as a substring and would otherwise match first.
+  const rule = css.match(new RegExp(`^\\${selector} \\{([^}]*)\\}`, "m"));
+  assert.ok(rule && /font-size:\s*[\d.]+cqw/.test(rule[1]),
+    `${selector} must set the cqw base font size so slide type scales with the slide`);
+}
 
 // No slide rule may reintroduce viewport units.
 const slideRules = css.split("\n").filter((line) => /^\.slide-[a-z-]/.test(line));

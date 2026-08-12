@@ -280,19 +280,43 @@ was.
 `test:parity` now also asserts the slide is a size container, that no slide rule
 uses viewport units, and that the pre-wrap rules are present.
 
+### Scaling fix take two, full-screen present, panel tabs (Aug 12, latest)
+
+**The container-unit fix was subtly wrong the first time.** `font-size: 1.9cqw`
+was set *on* `.slide-viewport` — the container itself. Container units used in a
+container's own styles resolve against an **ancestor** container, and with none
+present they fall back to the small viewport. So `cqw` was silently behaving
+exactly like `vw`: text scaled with the browser window while the slide did not.
+The base font size now lives on `.slide-canvas` and `.slide-float-layer`, which
+are children and therefore read the slide's own width. `test:parity` asserts both
+halves of this — that the viewport does *not* size itself in container units,
+and that the two children do.
+
+**Present mode fills the screen.** It reserved 5rem top / 6.5rem bottom for
+chrome that is `position: fixed` and needs no reserved space, then capped the
+slide at 1600px. Now the stack takes `min(width-limited, height-limited)` with a
+small allowance, and a taller allowance via `:has(.present-voiceover)` when the
+player is showing.
+
+**Collapse tabs are pinned to each panel's outer edge**, positioned from the same
+`--editor-resource-width` / `--editor-inspector-width` variables the grid uses.
+Collapsing sets a width to 0, so the tab slides left with its panel — the panel
+goes off, the pull tab stays. Panel headers gained left padding so the
+neighbouring tab, which overhangs into them, never covers the label.
+
+**Add slide is a split button** — "Add slide" opens a layout menu with previews
+in one or two columns that inserts on selection and closes, plus a Cancel;
+"Quick add" repeats the last layout in one click. Labels wrap one word per line
+so `line-height: 0.95` is set deliberately.
+
 ### Still owed from this round
 
-Items 5 and 6 of the request are **not done** and are the next thing to pick up:
-
-1. **Restructure the two left columns.** Column one becomes "Library" (content +
-   media only); column two becomes "Slide" and holds Add slide, Content, and
-   Design. The panel-header and collapse-tab pattern from this pass is built and
-   ready to carry both.
-2. **Add slide split button** — "Add slide" opening a rich dropdown of layout
-   previews (one or two columns, matching the current compact view) that inserts
-   on selection and closes, plus "Quick add" repeating the last/blank layout, and
-   a Cancel that just closes. Note the button labels want `line-height: 0.9–1`
-   since they wrap to one word per line.
+**Column restructure is still owed.** The split button and both panel patterns
+exist, but the panels themselves have not been re-sorted. Column one should end
+up "Library" (content + media only) and column two "Slide" (Add slide, Content,
+Design). Right now the Add slide control and the layout menu still live in
+column one alongside the libraries — moving them is a JSX reshuffle in
+`SlideEditor`, no new components needed.
 
 ### Next
 

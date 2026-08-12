@@ -126,6 +126,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   const [mediaTargetId, setMediaTargetId] = useState<string | null>(null);
   const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false);
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
+  const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
   const [mediaInitialAsset, setMediaInitialAsset] = useState<MediaAsset | null>(null);
   const [backgroundDragOver, setBackgroundDragOver] = useState(false);
   const [voiceoverDirty, setVoiceoverDirty] = useState(false);
@@ -687,7 +688,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             spot the panel came from. */}
         <div className="panel-tabs" role="group" aria-label="Collapsed panels">
           <button
-            type="button" className="panel-tab" data-side="left"
+            type="button" className="panel-tab" data-panel="resource"
             aria-expanded={panelLayout.resourceVisible}
             onClick={() => updatePanelLayout({ resourceVisible: !panelLayout.resourceVisible })}
           >
@@ -695,7 +696,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             <span className="panel-tab-label">Library</span>
           </button>
           <button
-            type="button" className="panel-tab" data-side="left"
+            type="button" className="panel-tab" data-panel="inspector"
             aria-expanded={panelLayout.inspectorVisible}
             onClick={() => updatePanelLayout({ inspectorVisible: !panelLayout.inspectorVisible })}
           >
@@ -706,22 +707,56 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
 
         {panelLayout.resourceVisible && <aside className="resource-palette" aria-label="Add slides and reusable assets">
           <div className="resource-palette-topbar">
-            <div><strong>Add slide</strong><span>{LAYOUTS.find((layout) => layout.key === addLayoutKey)?.name}</span></div>
-            <div className="resource-palette-topbar-actions"><button type="button" className="panel-add-button" onClick={() => addSlide()} disabled={isAdding} aria-label={`Add ${LAYOUTS.find((layout) => layout.key === addLayoutKey)?.name ?? "slide"}`}>{isAdding ? "…" : "+"}</button></div>
+            <div><strong>Library</strong></div>
           </div>
-          <PaletteSectionPanel id="layouts" label="Choose a layout" open={paletteState.layouts} onToggle={() => togglePaletteSection("layouts")}>
-            <p className="palette-help">Choose a layout to create a new slide with it.</p>
-            <div className={`layout-palette layout-add-palette is-${addLayoutView}`}>
-              {LAYOUTS.map((layout) => (
-                <button type="button" className={layout.key === addLayoutKey ? "is-selected" : ""} onClick={() => addSlide(layout.key)} disabled={isAdding} key={layout.key}>
-                  <span dangerouslySetInnerHTML={{ __html: layout.preview }} aria-hidden="true" />
-                  <strong>{layout.name}</strong>
-                  <small>Add slide</small>
-                </button>
-              ))}
+
+          {/* Split: choosing a layout is a considered decision and gets a real
+              picker; adding another of what you just used is one click. */}
+          <div className="add-slide-split">
+            <button
+              type="button" className="add-slide-main"
+              aria-expanded={layoutMenuOpen} aria-haspopup="menu"
+              disabled={isAdding}
+              onClick={() => setLayoutMenuOpen((open) => !open)}
+            >
+              Add<br />slide <span aria-hidden="true">▾</span>
+            </button>
+            <button
+              type="button" className="add-slide-quick"
+              disabled={isAdding}
+              onClick={() => addSlide()}
+              title={`Add another ${LAYOUTS.find((layout) => layout.key === addLayoutKey)?.name ?? "slide"}`}
+            >
+              Quick<br />add
+            </button>
+          </div>
+
+          {layoutMenuOpen && (
+            <div className="add-slide-menu" role="menu" aria-label="Choose a slide layout">
+              <div className="add-slide-menu-head">
+                <strong>Choose a layout</strong>
+                <PanelViewToggle
+                  label="Layout menu columns" value={addLayoutView}
+                  options={[{ value: "large", label: "One column", icon: "▤" }, { value: "compact", label: "Two columns", icon: "▦" }]}
+                  onChange={(value) => { setAddLayoutView(value); localStorage.setItem(ADD_LAYOUT_VIEW_KEY, value); }}
+                />
+              </div>
+              <div className={`layout-palette layout-add-palette is-${addLayoutView}`}>
+                {LAYOUTS.map((layout) => (
+                  <button
+                    type="button" role="menuitem"
+                    className={layout.key === addLayoutKey ? "is-selected" : ""}
+                    onClick={() => { setLayoutMenuOpen(false); addSlide(layout.key); }}
+                    disabled={isAdding} key={layout.key}
+                  >
+                    <span dangerouslySetInnerHTML={{ __html: layout.preview }} aria-hidden="true" />
+                    <strong>{layout.name}</strong>
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="add-slide-cancel" onClick={() => setLayoutMenuOpen(false)}>Cancel</button>
             </div>
-            <PanelViewToggle label="Add slide view" value={addLayoutView} options={[{ value: "large", label: "Cards", icon: "▦" }, { value: "compact", label: "Compact", icon: "☷" }]} onChange={(value) => { setAddLayoutView(value); localStorage.setItem(ADD_LAYOUT_VIEW_KEY, value); }} />
-          </PaletteSectionPanel>
+          )}
           <PaletteSectionPanel id="library" label="Library" count={availableLibraryItems.length} open={paletteState.library} onToggle={() => togglePaletteSection("library")}>
             <div className="library-palette-heading"><p className="palette-help">Insert a reusable block.</p><Link href="/library" onClick={confirmNavigate}>Open library</Link></div>
             <label className="library-search"><span className="sr-only">Search library blocks</span><input type="search" value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="Search saved blocks" /></label>
