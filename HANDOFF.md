@@ -224,6 +224,76 @@ them scrolled the thing you were adjusting off screen. Clicking an existing
 image opens Adjust; upload and add open Browse; picking a thumbnail while
 editing a block jumps to Adjust.
 
+**Two follow-up fixes.** The Adjust view was not filling the modal: the browse
+layout is a two-column grid (library + a fixed 340px details column), so hiding
+the library left the details pinned in column one with dead space beside it. Edit
+view now collapses to a single column and the details fill it, with the image
+side taking whatever the controls column does not need (`clamp(280px, 24%,
+380px)`). The base preview rule also pins images to 280px tall, which the stage
+now overrides.
+
+The block settings panel was being covered by floating images. No z-index on the
+panel could fix it: the panel lives inside `.slide-canvas` (z-index 2) and floats
+live in `.slide-float-layer` (z-index 9), which are sibling stacking contexts.
+Raising the whole canvas while a panel is open —
+`.slide-viewport:has(.block-settings-panel) > .slide-canvas { z-index: 12 }` — is
+the only thing that works, and it applies only for that moment.
+
+### Slide scaling, line breaks, thumbnails (Aug 12, latest)
+
+`npx tsc --noEmit` clean, ten test scripts passing.
+
+**Slides now scale to themselves.** `.slide-viewport` is a size container
+(`container-type: inline-size`) with a `cqw` base font size, and every block
+sizes in `em` from it. Slide type was previously `rem` and `vw` — pinned to the
+browser window, not the slide — which is why the editor and present mode
+disagreed and why the compact strip and thumbnails came out with oversized text.
+One knob (`.slide-viewport { font-size }`) now governs the whole scale, and the
+same canvas renders correctly at any width.
+
+**Authored line breaks survive.** They were stored in the text run all along but
+collapsed in every read-only renderer; only the contentEditable field showed
+them. `white-space: pre-wrap` on paragraph, blockquote, callout, title, tagline,
+and list items.
+
+**Image position edits stopped being discarded.** `MediaLibraryModal`'s seeding
+effect depended on the *node object*, which is rebuilt on every parent render —
+so it re-ran constantly and reset the draft to the saved props mid-edit. Keyed
+on the node id now, with the current props read through a ref.
+
+**Deck thumbnails are real.** `getDeckSummaries` fetches slide 1's block tree
+(one extra query rather than dragging jsonb through the existing aggregate) and
+the card renders `SlideCanvas`. This only works because of the container-unit
+change above; before it, a thumbnail would have rendered window-sized text.
+
+**Present is a split button** — primary opens at slide 1, the menu offers
+present-from-this-slide via `?from=N`, clamped rather than 404'd so a stale link
+still presents.
+
+**Panel headers and collapse reworked.** Headers are now a thin accent-tinted bar
+at the same scale as a block's chrome, and are labels only. Collapsing moved to
+tabs hanging off the workspace edge (`.panel-tabs`), which are deliberately not
+the header's toggle group and not the accordion chevron used inside panels. A
+collapsed panel leaves its tab behind, so reopening is one click where the panel
+was.
+
+`test:parity` now also asserts the slide is a size container, that no slide rule
+uses viewport units, and that the pre-wrap rules are present.
+
+### Still owed from this round
+
+Items 5 and 6 of the request are **not done** and are the next thing to pick up:
+
+1. **Restructure the two left columns.** Column one becomes "Library" (content +
+   media only); column two becomes "Slide" and holds Add slide, Content, and
+   Design. The panel-header and collapse-tab pattern from this pass is built and
+   ready to carry both.
+2. **Add slide split button** — "Add slide" opening a rich dropdown of layout
+   previews (one or two columns, matching the current compact view) that inserts
+   on selection and closes, plus "Quick add" repeating the last/blank layout, and
+   a Cancel that just closes. Note the button labels want `line-height: 0.9–1`
+   since they wrap to one word per line.
+
 ### Next
 
 `LIBRARIES.md` §9 step 5 — the media library on the shell, then companies (6),

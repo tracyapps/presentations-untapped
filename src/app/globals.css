@@ -193,18 +193,17 @@ button, select { cursor: pointer; }
 
 .deck-thumbnail {
   aspect-ratio: 16 / 9;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: var(--space-5);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
   background: var(--bg-page);
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-default);
   text-decoration: none;
 }
 
-.deck-thumbnail span { font: var(--text-h2); }
-.deck-thumbnail small { margin-top: var(--space-2); color: var(--text-secondary); }
+.deck-thumbnail > .slide-viewport { width: 100%; height: 100%; border: 0; box-shadow: none; }
+.deck-thumbnail-empty { color: var(--text-secondary); font: var(--text-body-sm); }
 .deck-thumbnail:hover { color: var(--text-primary); }
 .deck-title-row a, .deck-table a { color: var(--text-primary); text-decoration: none; }
 .deck-title-row a:hover, .deck-table a:hover { color: var(--link-color); }
@@ -301,6 +300,17 @@ button, select { cursor: pointer; }
 .editor-branding span { color: var(--text-secondary); font: var(--text-caption); }
 .editor-actions { justify-content: flex-end; }
 .editor-actions .button { min-height: 40px; padding-inline: var(--space-4); }
+
+/* Split button, same shape as the block editor's save control. */
+.editor-split { position: relative; display: inline-flex; }
+.editor-split > .button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.editor-split-toggle { min-width: 32px; padding-inline: var(--space-2); border-left: 1px solid var(--border-default); border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.editor-split-menu { position: absolute; z-index: 40; top: calc(100% + var(--space-2)); right: 0; display: grid; gap: 2px; width: 280px; padding: var(--space-2); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.editor-split-menu > * { display: grid; gap: 2px; padding: var(--space-3); border-radius: var(--radius-sm); color: var(--text-primary); text-decoration: none; }
+.editor-split-menu > *:hover { background: var(--bg-surface-raised); }
+.editor-split-menu strong { font: var(--text-body-sm); font-weight: 750; }
+.editor-split-menu span { color: var(--text-secondary); font: var(--text-caption); }
+
 .editor-panel-toggles { display: flex; gap: 2px; padding: 2px; background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
 .editor-panel-toggles button { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; background: transparent; color: var(--text-secondary); border: 0; border-radius: 4px; font: var(--text-caption); }
 .editor-panel-toggles button[aria-pressed="true"] { background: var(--bg-surface-raised); color: var(--accent-primary); box-shadow: var(--shadow-sm); }
@@ -333,22 +343,35 @@ button, select { cursor: pointer; }
 .editor-message-success { background: var(--bg-teal-soft); color: var(--text-primary); }
 .editor-message button { border: 0; background: transparent; color: inherit; font-weight: 800; text-decoration: underline; }
 
-.editor-body { --editor-resource-width: 260px; --editor-inspector-width: 230px; --editor-slide-row-height: 188px; position: relative; min-height: calc(100vh - 72px); display: grid; grid-template-columns: var(--editor-resource-width) var(--editor-inspector-width) minmax(0, 1fr); grid-template-rows: var(--editor-slide-row-height) minmax(0, 1fr); }
+.editor-body {
+  position: relative; --editor-resource-width: 260px; --editor-inspector-width: 230px; --editor-slide-row-height: 188px; position: relative; min-height: calc(100vh - 72px); display: grid; grid-template-columns: var(--editor-resource-width) var(--editor-inspector-width) minmax(0, 1fr); grid-template-rows: var(--editor-slide-row-height) minmax(0, 1fr); }
 .resource-palette, .block-palette { min-height: 0; display: grid; align-content: start; gap: var(--space-2); padding: var(--space-4); background: var(--bg-surface); border-right: 1px solid var(--border-default); overflow-y: auto; }
 .resource-palette { grid-row: 1 / -1; grid-column: 1; }
 .block-palette { grid-row: 1 / -1; grid-column: 2; }
-.resource-palette-topbar { position: sticky; top: calc(var(--space-4) * -1); z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) 0; padding: var(--space-3) var(--space-4); background: var(--bg-surface-raised); border-bottom: 1px solid var(--border-default); }
-.resource-palette-topbar > div { min-width: 0; display: grid; }
-.resource-palette-topbar strong { font: var(--text-body-sm); font-weight: 850; }
+/* Panel headers match the scale and treatment of a block's move/settings bar,
+   so "this is a panel header" reads the same everywhere: thin, accent-tinted,
+   small uppercase label. It is a label, not a control — collapsing happens on
+   the tab hanging off the panel edge. */
+.resource-palette-topbar { position: sticky; top: calc(var(--space-4) * -1); z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: 26px; margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) 0; padding: 0 var(--space-2) 0 var(--space-3); background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-surface)); border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent); }
+.resource-palette-topbar > div { min-width: 0; display: flex; align-items: baseline; gap: var(--space-2); }
+.resource-palette-topbar strong { color: var(--accent-primary); font: var(--text-caption); font-weight: 850; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
 .resource-palette-topbar span { overflow: hidden; color: var(--text-secondary); font: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
 .resource-palette-topbar-actions { display: flex; align-items: center; gap: var(--space-1); }
 .resource-palette-topbar-actions button { flex: none; padding: 0; border: 0; line-height: 1; }
-.resource-palette-topbar-actions .panel-add-button { width: 36px; height: 36px; background: var(--accent-primary); color: var(--text-on-accent); border-radius: var(--radius-pill); font-size: 1.45rem; box-shadow: var(--shadow-sm); }
+.resource-palette-topbar-actions .panel-add-button { width: 26px; height: 26px; background: var(--accent-primary); color: var(--text-on-accent); border-radius: var(--radius-pill); font-size: 1.05rem; box-shadow: var(--shadow-sm); }
 .resource-palette-topbar-actions .panel-add-button:disabled { opacity: 0.58; }
 .resource-palette-topbar-actions .panel-hide-button { width: 26px; height: 32px; background: transparent; color: var(--text-secondary); border-radius: var(--radius-sm); font-size: 1.15rem; }
-.panel-rail-header { display: flex; align-items: center; justify-content: space-between; min-height: 34px; color: var(--text-secondary); border-bottom: 1px solid var(--border-default); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
-.panel-rail-header button { width: 28px; height: 28px; padding: 0; background: transparent; color: var(--text-secondary); border: 0; border-radius: var(--radius-sm); font-size: 1.15rem; }
-.panel-rail-header button:hover, .resource-palette-topbar-actions .panel-hide-button:hover { background: var(--bg-page); color: var(--text-primary); }
+.panel-rail-header { display: flex; align-items: center; min-height: 26px; margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) 0; padding: 0 var(--space-3); background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-surface)); color: var(--accent-primary); border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent); font: var(--text-caption); font-weight: 850; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+
+/* Collapse tabs hang off the workspace edge. A collapsed panel leaves its tab
+   behind, so reopening is one click exactly where the panel was — no hunting
+   in a toolbar for which icon corresponds to which panel. */
+.panel-tabs { position: absolute; z-index: 6; top: var(--space-3); left: 0; display: grid; gap: var(--space-1); }
+.panel-tab { display: flex; align-items: center; gap: var(--space-1); min-height: 26px; padding: 0 var(--space-2); background: var(--bg-surface); color: var(--text-secondary); border: 1px solid var(--border-default); border-left: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; box-shadow: var(--shadow-sm); }
+.panel-tab:hover { color: var(--accent-primary); border-color: var(--accent-primary); }
+.panel-tab[aria-expanded="true"] { background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-surface)); color: var(--accent-primary); border-color: color-mix(in srgb, var(--accent-primary) 40%, transparent); }
+/* Open panels only need the chevron; the word is for finding a closed one. */
+.panel-tab[aria-expanded="true"] .panel-tab-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .editor-resize-handle { position: relative; z-index: 30; touch-action: none; }
 .editor-resize-handle::before { content: ""; position: absolute; background: transparent; transition: background var(--duration-fast) var(--ease-out); }
 .editor-resize-handle:hover::before, .editor-resize-handle:focus-visible::before, .is-resizing-editor .editor-resize-handle::before { background: var(--accent-primary); }
@@ -870,6 +893,16 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .design-workspace { width: min(100%, 1100px); margin: 0 auto; padding: var(--space-3) 0 var(--space-8); }
 
 .slide-viewport {
+  /* The slide is a size container, so everything inside it can be sized in
+     `cqw` — 1% of the slide's own width. That is what makes the editor, present
+     mode, the slide strip, deck thumbnails, and library previews render the
+     same slide identically at any size. Before this, type was sized in `rem`
+     and `vw`, so text was pinned to the browser window: the same deck looked
+     completely different in the editor and on screen, and thumbnails came out
+     with unreadable, oversized text. */
+  container-type: inline-size;
+  /* One knob for the whole slide's type scale; every block sizes in `em`. */
+  font-size: 1.9cqw;
   position: relative;
   aspect-ratio: 16 / 9;
   overflow: hidden;
@@ -923,43 +956,48 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .slide-canvas { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: center; gap: 3.2%; padding: 6%; }
 .slide-node-surface { min-width: 0; height: 100%; }
 .slide-node-surface.has-surface, .slide-layout.has-surface { padding: 4%; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); border-radius: var(--radius-md); }
-.slide-title { font: var(--text-display-lg); }
-.slide-tagline { margin: 0; color: var(--accent-primary); font: var(--text-h2); }
-.slide-paragraph { margin: 0; font-size: clamp(0.85rem, 2vw, 1.75rem); line-height: 1.5; }
+.slide-title { font-family: var(--font-display); font-size: 2.35em; font-weight: 800; line-height: 1.05; letter-spacing: var(--tracking-display); }
+.slide-tagline { margin: 0; color: var(--accent-primary); font-family: var(--font-heading); font-size: 1.4em; font-weight: 750; line-height: 1.2; }
+/* pre-wrap: authored line breaks are stored in the text run and have to
+   survive into every read-only renderer, not just the editable one. */
+.slide-paragraph { margin: 0; font-size: 1em; line-height: 1.5; white-space: pre-wrap; }
 .slide-layout { min-width: 0; display: flex; gap: 4%; }
+/* Titles and taglines carry authored breaks too. */
+.slide-title, .slide-tagline, .slide-list li { white-space: pre-wrap; }
 .slide-layout-row { align-items: stretch; }
 .slide-layout-row > * { flex: 1; }
 .slide-layout-columns, .slide-layout-grid { display: grid; }
 .slide-layout-group { flex-direction: column; }
-.slide-canvas blockquote { margin: 0; font: var(--text-display-md); }
-.slide-canvas blockquote cite { display: block; margin-top: var(--space-4); color: var(--text-secondary); font: var(--text-body-lg); }
-.slide-callout, .slide-stat { padding: 4%; border: 1px solid var(--border-default); border-left: 6px solid var(--surface-accent, var(--accent-primary)); border-radius: var(--radius-md); background: var(--bg-surface); }
+.slide-canvas blockquote { margin: 0; font-family: var(--font-display); font-size: 1.85em; font-weight: 750; line-height: 1.2; white-space: pre-wrap; }
+.slide-canvas blockquote cite { display: block; margin-top: 0.8em; color: var(--text-secondary); font-size: 0.62em; font-style: normal; }
+.slide-callout, .slide-stat { padding: 4%; border: 1px solid var(--border-default); border-left: 0.28em solid var(--surface-accent, var(--accent-primary)); border-radius: var(--radius-md); background: var(--bg-surface); white-space: pre-wrap; }
 .callout-accent { background: var(--bg-accent-soft); }
 .callout-teal { background: var(--bg-teal-soft); }
 .callout-blue { background: var(--bg-blue-soft); }
 .slide-stat { display: grid; text-align: center; }
-.slide-stat strong { color: var(--accent-primary); font: var(--text-display-md); }
-.slide-stat small { color: var(--text-secondary); }
+.slide-stat strong { color: var(--accent-primary); font-family: var(--font-display); font-size: 2.1em; font-weight: 800; line-height: 1.05; }
+.slide-stat small { color: var(--text-secondary); font-size: 0.72em; }
 .slide-figure { width: 100%; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; margin: 0; }
-.slide-figure figcaption { padding-top: var(--space-2); color: var(--text-secondary); font: var(--text-caption); text-align: center; }
+.slide-figure figcaption { padding-top: 0.4em; color: var(--text-secondary); font-size: 0.72em; text-align: center; }
 .slide-image { width: 100%; height: 100%; min-height: 0; object-fit: cover; border-radius: var(--radius-md); }
-.slide-image-placeholder { min-height: 180px; display: grid; place-items: center; background: var(--bg-surface); color: var(--text-secondary); border: 2px dashed var(--border-strong); border-radius: var(--radius-md); }
+.slide-image-placeholder { min-height: 5em; display: grid; place-items: center; background: var(--bg-surface); color: var(--text-secondary); border: 2px dashed var(--border-strong); border-radius: var(--radius-md); }
 .slide-image.has-frame, .slide-image-placeholder.has-frame { border-radius: 0; -webkit-mask-position: center; mask-position: center; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-size: 100% 100%; mask-size: 100% 100%; }
-.slide-list { font-size: clamp(0.85rem, 1.8vw, 1.5rem); line-height: 1.6; }
-.slide-process { --process-marker-size: clamp(1.8rem, 3.7vw, 3rem); display: flex; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
-.slide-process li { position: relative; min-width: 0; display: flex; align-items: center; gap: var(--space-3); }
-.slide-process-marker { position: relative; z-index: 1; width: var(--process-marker-size); height: var(--process-marker-size); flex: 0 0 var(--process-marker-size); display: grid; place-items: center; background: var(--accent-primary); color: var(--text-on-accent); border-radius: 50%; font: var(--text-h3); font-weight: 800; }
+.slide-list { font-size: 0.95em; line-height: 1.6; }
+.slide-process { --process-marker-size: 2.1em; display: flex; gap: 1em; margin: 0; padding: 0; list-style: none; font-size: 0.95em; }
+.slide-process li { position: relative; min-width: 0; display: flex; align-items: center; gap: 0.6em; }
+.slide-process-marker { position: relative; z-index: 1; width: var(--process-marker-size); height: var(--process-marker-size); flex: 0 0 var(--process-marker-size); display: grid; place-items: center; background: var(--accent-primary); color: var(--text-on-accent); border-radius: 50%; font-size: 0.95em; font-weight: 800; }
 .slide-process li > div { min-width: 0; display: grid; gap: var(--space-1); }
-.slide-process li strong { font: var(--text-h3); }
-.slide-process li small { color: var(--text-secondary); font: var(--text-body-sm); }
+.slide-process li strong { font-family: var(--font-heading); font-size: 1.05em; font-weight: 750; }
+.slide-process li small { color: var(--text-secondary); font-size: 0.8em; }
 .slide-process.is-horizontal li { flex: 1; flex-direction: column; text-align: center; }
 .slide-process.is-horizontal li:not(:last-child)::after { content: ""; position: absolute; z-index: 0; top: calc(var(--process-marker-size) / 2); left: calc(50% + var(--process-marker-size) / 2); width: calc(100% + var(--space-4) - var(--process-marker-size)); border-top: 2px solid var(--border-strong); }
 .slide-process.is-vertical { flex-direction: column; }
 .slide-process.is-vertical li { width: 100%; padding: var(--space-3); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
 .slide-process.is-vertical li:not(:last-child)::after { content: ""; position: absolute; top: 100%; left: calc(var(--space-3) + var(--process-marker-size) / 2); height: var(--space-4); border-left: 2px solid var(--border-strong); }
 .slide-data-table { width: 100%; border-collapse: collapse; }
-.slide-data-table th, .slide-data-table td { padding: var(--space-2); border: 1px solid var(--border-default); }
-.slide-pricing { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.slide-data-table th, .slide-data-table td { padding: 0.4em 0.55em; border: 1px solid var(--border-default); }
+.slide-data-table { font-size: 0.85em; }
+.slide-pricing { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6em; font-size: 0.85em; }
 .slide-pricing > div { padding: var(--space-4); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
 .slide-pricing > .is-highlighted { border-color: var(--accent-primary); }
 .slide-chart { height: 220px; display: flex; align-items: flex-end; gap: var(--space-2); }
@@ -1043,15 +1081,22 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 
 /* Adjust view: library out of the way, image ~2/3 and sticky. */
 .media-modal-body[data-view="edit"] .media-modal-library { display: none; }
-.media-modal-body[data-view="edit"] .media-modal-details { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); align-items: start; gap: var(--space-5); overflow: hidden; }
-.media-modal-body[data-view="edit"] .media-modal-preview[data-stage] { position: sticky; top: 0; display: grid; place-items: center; height: min(64vh, 620px); padding: var(--space-4); background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
-.media-modal-body[data-view="edit"] .media-modal-preview[data-stage] img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.media-modal-body[data-view="edit"] .media-modal-controls { max-height: min(64vh, 620px); overflow-y: auto; padding-right: var(--space-2); }
+/* The browse layout is a two-column grid (library + 340px details). Hiding the
+   library left the details pinned in the first column with 340px of dead space
+   beside it — collapse to one column so the details own the whole modal. */
+.media-modal-body[data-view="edit"] { grid-template-columns: minmax(0, 1fr); }
+/* Image side takes whatever the controls do not need. The controls column has a
+   sensible range rather than a fixed width so both sides flex. */
+.media-modal-body[data-view="edit"] .media-modal-details { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 24%, 380px); align-items: stretch; gap: var(--space-5); overflow: hidden; border-left: 0; }
+.media-modal-body[data-view="edit"] .media-modal-preview[data-stage] { height: 100%; min-height: 0; display: grid; place-items: center; padding: var(--space-4); background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
+/* The base preview rule pins images to 280px tall; the stage needs them to fill. */
+.media-modal-body[data-view="edit"] .media-modal-preview[data-stage] img { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; }
+.media-modal-body[data-view="edit"] .media-modal-controls { min-height: 0; height: 100%; overflow-y: auto; padding-right: var(--space-2); }
 
 @media (max-width: 1000px) {
-  .media-modal-body[data-view="edit"] .media-modal-details { grid-template-columns: minmax(0, 1fr); }
-  .media-modal-body[data-view="edit"] .media-modal-preview[data-stage] { position: static; height: 40vh; }
-  .media-modal-body[data-view="edit"] .media-modal-controls { max-height: none; overflow: visible; }
+  .media-modal-body[data-view="edit"] .media-modal-details { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(200px, 45%) minmax(0, 1fr); overflow-y: auto; }
+  .media-modal-body[data-view="edit"] .media-modal-preview[data-stage] { height: 100%; }
+  .media-modal-body[data-view="edit"] .media-modal-controls { height: auto; overflow: visible; }
 }
 
 /* --- Per-block settings (spacing, alignment, width, background) --------
@@ -1063,7 +1108,7 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .block-settings > button:hover { background: var(--bg-page); color: var(--accent-primary); }
 .block-settings > button.is-configured { color: var(--accent-primary); }
 .block-settings > button.is-configured::after { content: ""; position: absolute; top: 1px; right: 1px; width: 5px; height: 5px; background: var(--accent-primary); border-radius: 50%; }
-.block-settings-panel { position: absolute; z-index: 30; top: calc(100% + 4px); right: 0; display: grid; gap: var(--space-3); width: 250px; padding: var(--space-3); background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); text-align: left; }
+.block-settings-panel { position: absolute; z-index: 40; top: calc(100% + 4px); right: 0; display: grid; gap: var(--space-3); width: 250px; padding: var(--space-3); background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); text-align: left; }
 .block-settings-panel fieldset { display: grid; gap: var(--space-2); margin: 0; padding: 0; border: 0; }
 .block-settings-panel legend { padding: 0; color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
 .block-settings-panel select { width: 100%; min-height: 32px; padding: 0 var(--space-2); background: var(--bg-page); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-caption); }
@@ -1076,6 +1121,17 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .block-settings-choice:has(input:checked) { background: var(--accent-primary); color: var(--text-on-accent); }
 .block-settings-choice:has(input:focus-visible) { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
 .block-settings-reset { padding: var(--space-2) 0 0; background: transparent; color: var(--accent-primary); border: 0; border-top: 1px solid var(--border-default); font: var(--text-caption); font-weight: 750; text-align: left; }
+
+
+/* The settings panel lives inside .slide-canvas (z-index 2) while floating
+   images live in .slide-float-layer (z-index 9). Those are sibling stacking
+   contexts, so no z-index on the panel itself can lift it above a float — the
+   panel was being covered by whatever image happened to overlap it. Raising the
+   whole canvas while a panel is open is the only thing that works, and it is
+   scoped to exactly that moment. */
+.slide-viewport:has(.block-settings-panel) > .slide-canvas { z-index: 12; }
+/* Same problem one level down when the settings belong to a floating image. */
+.slide-float-layer > .editable-slide-block:has(.block-settings-panel) { z-index: 1; }
 
 .editable-slide-block { min-width: 0; position: relative; padding-top: 24px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
 .editable-slide-block, .outline-block, .outline-layout, .dnd-node-slot, .outline-node-slot { transition: opacity 140ms ease, transform 140ms ease; }

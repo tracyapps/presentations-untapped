@@ -72,4 +72,39 @@ assert.ok(layerMeasures >= 2,
 assert.ok(/\.editable-slide-block\.is-floating-image-block \{[^}]*padding-top:\s*0/.test(css),
   "the editor's block chrome must not push a floating image down by its own height");
 
-console.log("Render parity OK: floats share one 16:9 layer across edit and present.");
+/* --- 7. Slides scale to themselves, not the browser window ------------ */
+
+// Slide type used to be sized in `rem` and `vw`, so it was pinned to the
+// viewport: the same deck looked different in the editor and in present mode,
+// and thumbnails came out with unreadable oversized text. The slide is a size
+// container now and everything inside sizes from it.
+const viewportRule = css.match(/^\.slide-viewport \{([\s\S]*?)^\}/m);
+assert.ok(viewportRule, ".slide-viewport rule not found");
+assert.ok(/container-type:\s*inline-size/.test(viewportRule[1]),
+  ".slide-viewport must be a size container so slide content can size in cqw");
+assert.ok(/font-size:\s*[\d.]+cqw/.test(viewportRule[1]),
+  ".slide-viewport must set a cqw base font size — the whole slide type scale hangs off it");
+
+// No slide rule may reintroduce viewport units.
+const slideRules = css.split("\n").filter((line) => /^\.slide-[a-z-]/.test(line));
+const viewportUnitRules = slideRules.filter((line) => /\d(vw|vh|vmin|vmax)\b/.test(line));
+assert.equal(viewportUnitRules.length, 0,
+  `slide rules must not use viewport units:\n${viewportUnitRules.join("\n")}`);
+
+/* --- 8. Authored line breaks survive into read-only renderers --------- */
+
+// Breaks are stored in the text run; without pre-wrap they collapse everywhere
+// except the contentEditable field, so text looked right while editing and
+// wrong on screen.
+for (const selector of [".slide-paragraph", ".slide-canvas blockquote"]) {
+  const rule = css.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")} \\{([^}]*)\\}`));
+  assert.ok(rule && /white-space:\s*pre-wrap/.test(rule[1]),
+    `${selector} must use white-space: pre-wrap so authored line breaks survive`);
+}
+assert.ok(/\.slide-title, \.slide-tagline, \.slide-list li \{[^}]*white-space:\s*pre-wrap/.test(css),
+  "titles, taglines, and list items must preserve authored line breaks too");
+
+console.log(
+  "Render parity OK: floats share one 16:9 layer, slides size in container units, " +
+  "and line breaks survive into present.",
+);

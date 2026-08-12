@@ -8,10 +8,12 @@ import type { EditorDeck } from "@/lib/data/editor";
 
 type Theme = "light" | "dark";
 
-export default function PresentDeck({ deck }: { deck: EditorDeck }) {
+/** `startIndex` supports "present from this slide" — see the split Present
+ *  button in the editor. */
+export default function PresentDeck({ deck, startIndex = 0 }: { deck: EditorDeck; startIndex?: number }) {
   const shellRef = useRef<HTMLElement>(null);
   const overviewCloseRef = useRef<HTMLButtonElement>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [overview, setOverview] = useState(false);
   const [theme, setTheme] = useState<Theme>(deck.themeDefault);
   const [fullscreen, setFullscreen] = useState(false);

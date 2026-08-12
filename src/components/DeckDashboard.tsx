@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import SlideCanvas from "@/components/SlideCanvas";
 import { useEffect, useMemo, useState } from "react";
 import type { DeckSummary } from "@/lib/data/decks";
 
@@ -117,8 +118,13 @@ export default function DeckDashboard({ decks }: { decks: DeckSummary[] }) {
 function DeckCard({ deck }: { deck: DeckSummary }) {
   return (
     <article className="deck-card">
-      <Link className="deck-thumbnail" href={`/decks/${deck.id}/edit/1`} data-theme={deck.themeDefault} aria-label={`Edit ${deck.title}`}>
-        <span>{deck.title}</span><small>{deck.clientName}</small>
+      {/* A real render of slide 1, not a text stand-in. Now that slides size
+          themselves in container units, the same canvas renders correctly at
+          any width — no separate thumbnail renderer, no image generation. */}
+      <Link className="deck-thumbnail" href={`/decks/${deck.id}/edit/1`} aria-label={`Edit ${deck.title}`}>
+        {deck.firstSlide
+          ? <SlideCanvas doc={deck.firstSlide} theme={deck.themeDefault} />
+          : <span className="deck-thumbnail-empty" data-theme={deck.themeDefault}>No slides yet</span>}
       </Link>
       <div className="deck-card-body">
         <div className="deck-title-row">

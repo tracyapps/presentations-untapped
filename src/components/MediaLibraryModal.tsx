@@ -48,14 +48,31 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
    */
   const [view, setView] = useState<"browse" | "edit">(image ? "edit" : "browse");
   const closeRef = useRef<HTMLButtonElement>(null);
+  /** Latest props for the open image, read by the seeding effect without making
+   *  that effect depend on the node's identity. */
+  const imageProps = useRef<ContentProps["image"] | null>(image ? { ...image.props } : null);
+  imageProps.current = image ? { ...image.props } : null;
 
+  /**
+   * Seeds the draft when the modal opens on a different image.
+   *
+   * Keyed on the node **id**, not the node object: the node is rebuilt on every
+   * parent render, so depending on its identity re-ran this effect constantly
+   * and reset the draft back to the saved props — which is why position, focal
+   * point, and rotation appeared to work in the preview and then vanish. The
+   * draft is deliberately not resynced while the modal stays open on one image;
+   * it is the user's uncommitted work until they press Use image.
+   */
+  const imageId = image?.id ?? null;
+  const initialAssetUrl = initialAsset?.url ?? null;
   useEffect(() => {
     if (!open) return;
-    setView(image ? "edit" : "browse");
-    if (image) setDraft({ ...image.props });
-    else if (initialAsset) setDraft({ src: initialAsset.url, alt: defaultAlt(initialAsset), placement: "floating", x: 60, y: 18, width: 30 });
+    setView(imageId ? "edit" : "browse");
+    if (imageProps.current) setDraft({ ...imageProps.current });
+    else if (initialAssetUrl) setDraft({ src: initialAssetUrl, alt: defaultAlt(initialAsset!), placement: "floating", x: 60, y: 18, width: 30 });
     else setDraft({ src: "", alt: "", placement: "floating", x: 60, y: 18, width: 30 });
-  }, [image, initialAsset, open]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageId, initialAssetUrl, open]);
 
   useEffect(() => {
     if (!open) return;

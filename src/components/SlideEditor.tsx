@@ -125,6 +125,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   const [libraryName, setLibraryName] = useState("");
   const [mediaTargetId, setMediaTargetId] = useState<string | null>(null);
   const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false);
+  const [presentMenuOpen, setPresentMenuOpen] = useState(false);
   const [mediaInitialAsset, setMediaInitialAsset] = useState<MediaAsset | null>(null);
   const [backgroundDragOver, setBackgroundDragOver] = useState(false);
   const [voiceoverDirty, setVoiceoverDirty] = useState(false);
@@ -635,7 +636,33 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             <button type="button" aria-label="Toggle slides row" title="Slide navigator" aria-pressed={panelLayout.slidesVisible} onClick={() => updatePanelLayout({ slidesVisible: !panelLayout.slidesVisible })}>▤</button>
           </div>
           <span className={`save-state save-state-${visibleSaveState}`} aria-live="polite">{stateLabel[visibleSaveState]}</span>
-          <Link className="button button-secondary" href={`/decks/${deck.id}/present`} onClick={confirmNavigate}>Present</Link>
+          {/* Split: presenting from the top is the common case and stays one
+              click; presenting from where you are is the rehearsal case. */}
+          <div className="editor-split">
+            <Link className="button button-secondary" href={`/decks/${deck.id}/present`} onClick={confirmNavigate}>Present</Link>
+            <button
+              type="button" className="button button-secondary editor-split-toggle"
+              aria-expanded={presentMenuOpen} aria-haspopup="menu"
+              onClick={() => setPresentMenuOpen((open) => !open)}
+            >
+              <span aria-hidden="true">▾</span>
+              <span className="sr-only">More present options</span>
+            </button>
+            {presentMenuOpen && (
+              <div className="editor-split-menu" role="menu" onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as globalThis.Node)) setPresentMenuOpen(false);
+              }}>
+                <Link role="menuitem" href={`/decks/${deck.id}/present`} onClick={(event) => { setPresentMenuOpen(false); confirmNavigate(event); }}>
+                  <strong>Present from the start</strong>
+                  <span>Opens at slide 1.</span>
+                </Link>
+                <Link role="menuitem" href={`/decks/${deck.id}/present?from=${initialSlide.position}`} onClick={(event) => { setPresentMenuOpen(false); confirmNavigate(event); }}>
+                  <strong>Present from this slide</strong>
+                  <span>Opens at slide {initialSlide.position} of {deck.slides.length}.</span>
+                </Link>
+              </div>
+            )}
+          </div>
           <Link className="button button-secondary" href="/decks" onClick={confirmNavigate}>Close</Link>
           <button className="button button-primary" type="button" onClick={() => void save()} disabled={!dirty || saveState === "saving" || saveState === "conflict"}>Save</button>
         </div>
@@ -652,10 +679,35 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
           "--editor-slide-row-height": `${panelLayout.slidesVisible ? panelLayout.slideRowHeight : 0}px`,
         } as React.CSSProperties}
       >
+        {/* Collapse tabs. These hang off the edge of the workspace, deliberately
+            not in the header's panel-toggle group and not the same chevron used
+            for accordions inside the panels — a collapse control that looks like
+            an accordion control teaches the wrong thing. Because a collapsed
+            panel leaves its tab behind, reopening is always one click on the
+            spot the panel came from. */}
+        <div className="panel-tabs" role="group" aria-label="Collapsed panels">
+          <button
+            type="button" className="panel-tab" data-side="left"
+            aria-expanded={panelLayout.resourceVisible}
+            onClick={() => updatePanelLayout({ resourceVisible: !panelLayout.resourceVisible })}
+          >
+            <span aria-hidden="true">{panelLayout.resourceVisible ? "⟨" : "⟩"}</span>
+            <span className="panel-tab-label">Library</span>
+          </button>
+          <button
+            type="button" className="panel-tab" data-side="left"
+            aria-expanded={panelLayout.inspectorVisible}
+            onClick={() => updatePanelLayout({ inspectorVisible: !panelLayout.inspectorVisible })}
+          >
+            <span aria-hidden="true">{panelLayout.inspectorVisible ? "⟨" : "⟩"}</span>
+            <span className="panel-tab-label">Slide</span>
+          </button>
+        </div>
+
         {panelLayout.resourceVisible && <aside className="resource-palette" aria-label="Add slides and reusable assets">
           <div className="resource-palette-topbar">
             <div><strong>Add slide</strong><span>{LAYOUTS.find((layout) => layout.key === addLayoutKey)?.name}</span></div>
-            <div className="resource-palette-topbar-actions"><button type="button" className="panel-hide-button" onClick={() => updatePanelLayout({ resourceVisible: false })} aria-label="Hide add slide panel" title="Hide panel">‹</button><button type="button" className="panel-add-button" onClick={() => addSlide()} disabled={isAdding} aria-label={`Add ${LAYOUTS.find((layout) => layout.key === addLayoutKey)?.name ?? "slide"}`}>{isAdding ? "…" : "+"}</button></div>
+            <div className="resource-palette-topbar-actions"><button type="button" className="panel-add-button" onClick={() => addSlide()} disabled={isAdding} aria-label={`Add ${LAYOUTS.find((layout) => layout.key === addLayoutKey)?.name ?? "slide"}`}>{isAdding ? "…" : "+"}</button></div>
           </div>
           <PaletteSectionPanel id="layouts" label="Choose a layout" open={paletteState.layouts} onToggle={() => togglePaletteSection("layouts")}>
             <p className="palette-help">Choose a layout to create a new slide with it.</p>
@@ -686,7 +738,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
         {panelLayout.resourceVisible && <ResizeHandle orientation="vertical" className="resource-resize-handle" label="Resize add slide panel" value={panelLayout.resourceWidth} min={PANEL_LIMITS.resourceWidth[0]} max={PANEL_LIMITS.resourceWidth[1]} resetValue={DEFAULT_PANEL_LAYOUT.resourceWidth} onChange={(resourceWidth) => updatePanelLayout({ resourceWidth })} />}
 
         {panelLayout.inspectorVisible && <aside className="block-palette" aria-label="Slide controls">
-          <div className="panel-rail-header"><strong>Slide controls</strong><button type="button" onClick={() => updatePanelLayout({ inspectorVisible: false })} aria-label="Hide slide controls panel" title="Hide panel">‹</button></div>
+          <div className="panel-rail-header"><strong>Slide controls</strong></div>
           {tab === "voiceover" ? (
             <div className="palette-note"><strong>Voiceover tools</strong><p>Each slide can have one reusable player and a manually timed caption track.</p></div>
           ) : (
