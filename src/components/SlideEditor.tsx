@@ -498,20 +498,6 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     setMediaLibraryOpen(true);
   }
 
-  function changeImageLayer(id: string, action: "back" | "backward" | "forward" | "front") {
-    const blocks = [...docRef.current.blocks];
-    const index = blocks.findIndex((node) => node.id === id);
-    if (index < 0) return;
-    const target = action === "back" ? 0
-      : action === "front" ? blocks.length - 1
-      : action === "backward" ? Math.max(0, index - 1)
-      : Math.min(blocks.length - 1, index + 1);
-    if (target === index) return;
-    const [node] = blocks.splice(index, 1);
-    blocks.splice(target, 0, node);
-    markDoc({ ...docRef.current, blocks });
-  }
-
   function useMediaAsBackground(asset: MediaAsset) {
     updateSlideDesign({ backgroundImage: { src: asset.url, position: "center", overlay: "soft" } });
     setLibraryNotice(`Set ${asset.name} as the background for slide ${initialSlide.position}.`);
@@ -727,7 +713,6 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             onDelete: removeBlock,
             onDuplicate: (node) => markDoc(duplicateNode(docRef.current, node.id)),
             onMove: (node, direction) => markDoc(moveNode(docRef.current, node.id, direction)),
-            onLayer: (node, action) => changeImageLayer(node.id, action),
             onDrop: dropBlock,
             onSaveToLibrary: openLibraryDialog,
             onEditImage: (node) => setMediaTargetId(node.id),

@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 type TooltipPosition = {
   arrowLeft: number;
@@ -81,7 +82,7 @@ export default function IconTooltip({
       onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }}
     >
       {cloneElement(children, { "aria-describedby": describedBy })}
-      {open && (
+      {open && createPortal(
         <span
           className={`icon-tooltip icon-tooltip-${position?.side ?? "below"}`}
           id={id}
@@ -102,7 +103,7 @@ export default function IconTooltip({
             </span>
           )}
         </span>
-      )}
+      , document.body)}
     </span>
   );
 }

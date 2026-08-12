@@ -4,6 +4,7 @@ import {
   clampFloatingImage,
   imageHeightPercent,
   normalizeRotation,
+  positionFloatingImage,
   snapFloatingPosition,
   snapRotation,
 } from "../src/lib/image-geometry.ts";
@@ -30,6 +31,10 @@ assert.equal(imageHeightPercent(40, 4 / 3), 160 / 3, "4:3 image height should ac
 const snapped = snapFloatingPosition({ src: "image.jpg", alt: "Example", placement: "floating", x: 29.6, y: 22.9, width: 40, aspectRatio: 4 / 3 });
 assert.equal(snapped.x, 30, "nearby horizontal centers should snap");
 assert.equal(snapped.y, (100 - imageHeightPercent(40, 4 / 3)) / 2, "nearby vertical centers should snap");
+const freelyPositioned = positionFloatingImage({ src: "image.jpg", alt: "Example", placement: "floating", x: 29.6, y: 22.9, width: 40, aspectRatio: 4 / 3 });
+assert.equal(freelyPositioned.x, 29.6, "free dragging should preserve an arbitrary horizontal position");
+assert.equal(freelyPositioned.y, 22.9, "free dragging should preserve an arbitrary vertical position");
+assert.equal(positionFloatingImage(freelyPositioned, true).x, 30, "explicit guide snapping should still be available");
 
 assert.equal(alignFloatingImage(clamped, "right").x, 60, "right alignment should use the image width");
 assert.equal(alignFloatingImage(clamped, "bottom").y, 100 - imageHeightPercent(40, 4 / 3), "bottom alignment should use proportional image height");

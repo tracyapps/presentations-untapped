@@ -70,6 +70,10 @@ export function snapFloatingPosition(props: ContentProps["image"]): ContentProps
   });
 }
 
+export function positionFloatingImage(props: ContentProps["image"], snapToGuides = false): ContentProps["image"] {
+  return snapToGuides ? snapFloatingPosition(props) : clampFloatingImage(props);
+}
+
 export function alignFloatingImage(props: ContentProps["image"], alignment: ImageAlignment): ContentProps["image"] {
   const normalized = clampFloatingImage(props);
   const width = normalized.width ?? 30;
