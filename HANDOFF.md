@@ -311,12 +311,19 @@ so `line-height: 0.95` is set deliberately.
 
 ### Still owed from this round
 
-**Column restructure is still owed.** The split button and both panel patterns
-exist, but the panels themselves have not been re-sorted. Column one should end
-up "Library" (content + media only) and column two "Slide" (Add slide, Content,
-Design). Right now the Add slide control and the layout menu still live in
-column one alongside the libraries — moving them is a JSX reshuffle in
-`SlideEditor`, no new components needed.
+**Column restructure is done.** Column one is "Library" (reusable blocks and
+media only); column two is "Slide" and now holds Add slide, Content, and Design.
+
+**Collapse tabs are gone.** They were unreliable — the pinned-to-panel-edge
+positioning fought the grid — and the header toggle group already does the job.
+Removed rather than patched; the toggles in the editor header are now the only
+way to show and hide panels.
+
+**The Add slide menu overlays** instead of pushing. `.add-slide` is the
+positioning context and the menu is absolute with `top: 100%`, so opening the
+picker no longer shoves Content and Design down the page. Note the panel's
+`overflow-y: auto` clips the menu to the panel box, which is the intended scope
+for a panel-level dropdown; `max-height: 62vh` keeps it inside.
 
 ### Next
 

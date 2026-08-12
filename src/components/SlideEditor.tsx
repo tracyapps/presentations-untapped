@@ -680,38 +680,33 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
           "--editor-slide-row-height": `${panelLayout.slidesVisible ? panelLayout.slideRowHeight : 0}px`,
         } as React.CSSProperties}
       >
-        {/* Collapse tabs. These hang off the edge of the workspace, deliberately
-            not in the header's panel-toggle group and not the same chevron used
-            for accordions inside the panels — a collapse control that looks like
-            an accordion control teaches the wrong thing. Because a collapsed
-            panel leaves its tab behind, reopening is always one click on the
-            spot the panel came from. */}
-        <div className="panel-tabs" role="group" aria-label="Collapsed panels">
-          <button
-            type="button" className="panel-tab" data-panel="resource"
-            aria-expanded={panelLayout.resourceVisible}
-            onClick={() => updatePanelLayout({ resourceVisible: !panelLayout.resourceVisible })}
-          >
-            <span aria-hidden="true">{panelLayout.resourceVisible ? "⟨" : "⟩"}</span>
-            <span className="panel-tab-label">Library</span>
-          </button>
-          <button
-            type="button" className="panel-tab" data-panel="inspector"
-            aria-expanded={panelLayout.inspectorVisible}
-            onClick={() => updatePanelLayout({ inspectorVisible: !panelLayout.inspectorVisible })}
-          >
-            <span aria-hidden="true">{panelLayout.inspectorVisible ? "⟨" : "⟩"}</span>
-            <span className="panel-tab-label">Slide</span>
-          </button>
-        </div>
-
-        {panelLayout.resourceVisible && <aside className="resource-palette" aria-label="Add slides and reusable assets">
+        {panelLayout.resourceVisible && <aside className="resource-palette" aria-label="Reusable blocks and media">
           <div className="resource-palette-topbar">
             <div><strong>Library</strong></div>
           </div>
 
+          <PaletteSectionPanel id="library" label="Library" count={availableLibraryItems.length} open={paletteState.library} onToggle={() => togglePaletteSection("library")}>
+            <div className="library-palette-heading"><p className="palette-help">Insert a reusable block.</p><Link href="/library" onClick={confirmNavigate}>Open library</Link></div>
+            <label className="library-search"><span className="sr-only">Search library blocks</span><input type="search" value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="Search saved blocks" /></label>
+            <div className="library-palette" aria-live="polite">
+              {visibleLibraryItems.map((item) => <button type="button" onClick={() => insertLibraryItem(item)} key={item.id}><strong>{item.name}</strong><span>{item.node.type.replace(/([A-Z])/g, " $1")}</span></button>)}
+              {!visibleLibraryItems.length && <p className="library-palette-empty">{availableLibraryItems.length ? "No matching blocks." : "Save a block with the star button to build your library."}</p>}
+            </div>
+          </PaletteSectionPanel>
+          <PaletteSectionPanel id="media" label="Media" count={mediaItems.length} open={paletteState.media} onToggle={() => togglePaletteSection("media")}>
+            <div className="library-palette-heading"><p className="palette-help">Click to preview and choose how to use an image.</p><button type="button" className="palette-text-action" onClick={() => openMediaLibrary()}>Open library</button></div>
+            <MediaLibraryPanel items={mediaItems} configured={mediaLibrary.configured} loadError={mediaLibrary.error} onUploaded={registerMedia} onSelect={openMediaLibrary} />
+          </PaletteSectionPanel>
+        </aside>}
+        {panelLayout.resourceVisible && <ResizeHandle orientation="vertical" className="resource-resize-handle" label="Resize add slide panel" value={panelLayout.resourceWidth} min={PANEL_LIMITS.resourceWidth[0]} max={PANEL_LIMITS.resourceWidth[1]} resetValue={DEFAULT_PANEL_LAYOUT.resourceWidth} onChange={(resourceWidth) => updatePanelLayout({ resourceWidth })} />}
+
+        {panelLayout.inspectorVisible && <aside className="block-palette" aria-label="Slide controls">
+          <div className="panel-rail-header"><strong>Slide</strong></div>
           {/* Split: choosing a layout is a considered decision and gets a real
-              picker; adding another of what you just used is one click. */}
+              picker; adding another of what you just used is one click. The menu
+              overlays the panel below rather than pushing it, so opening it does
+              not shove the Content and Design sections down the page. */}
+          <div className="add-slide">
           <div className="add-slide-split">
             <button
               type="button" className="add-slide-main"
@@ -757,23 +752,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
               <button type="button" className="add-slide-cancel" onClick={() => setLayoutMenuOpen(false)}>Cancel</button>
             </div>
           )}
-          <PaletteSectionPanel id="library" label="Library" count={availableLibraryItems.length} open={paletteState.library} onToggle={() => togglePaletteSection("library")}>
-            <div className="library-palette-heading"><p className="palette-help">Insert a reusable block.</p><Link href="/library" onClick={confirmNavigate}>Open library</Link></div>
-            <label className="library-search"><span className="sr-only">Search library blocks</span><input type="search" value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="Search saved blocks" /></label>
-            <div className="library-palette" aria-live="polite">
-              {visibleLibraryItems.map((item) => <button type="button" onClick={() => insertLibraryItem(item)} key={item.id}><strong>{item.name}</strong><span>{item.node.type.replace(/([A-Z])/g, " $1")}</span></button>)}
-              {!visibleLibraryItems.length && <p className="library-palette-empty">{availableLibraryItems.length ? "No matching blocks." : "Save a block with the star button to build your library."}</p>}
-            </div>
-          </PaletteSectionPanel>
-          <PaletteSectionPanel id="media" label="Media" count={mediaItems.length} open={paletteState.media} onToggle={() => togglePaletteSection("media")}>
-            <div className="library-palette-heading"><p className="palette-help">Click to preview and choose how to use an image.</p><button type="button" className="palette-text-action" onClick={() => openMediaLibrary()}>Open library</button></div>
-            <MediaLibraryPanel items={mediaItems} configured={mediaLibrary.configured} loadError={mediaLibrary.error} onUploaded={registerMedia} onSelect={openMediaLibrary} />
-          </PaletteSectionPanel>
-        </aside>}
-        {panelLayout.resourceVisible && <ResizeHandle orientation="vertical" className="resource-resize-handle" label="Resize add slide panel" value={panelLayout.resourceWidth} min={PANEL_LIMITS.resourceWidth[0]} max={PANEL_LIMITS.resourceWidth[1]} resetValue={DEFAULT_PANEL_LAYOUT.resourceWidth} onChange={(resourceWidth) => updatePanelLayout({ resourceWidth })} />}
-
-        {panelLayout.inspectorVisible && <aside className="block-palette" aria-label="Slide controls">
-          <div className="panel-rail-header"><strong>Slide controls</strong></div>
+          </div>
           {tab === "voiceover" ? (
             <div className="palette-note"><strong>Voiceover tools</strong><p>Each slide can have one reusable player and a manually timed caption track.</p></div>
           ) : (

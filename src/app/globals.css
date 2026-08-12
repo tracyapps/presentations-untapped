@@ -361,27 +361,12 @@ button, select { cursor: pointer; }
 .resource-palette-topbar-actions .panel-add-button { width: 26px; height: 26px; background: var(--accent-primary); color: var(--text-on-accent); border-radius: var(--radius-pill); font-size: 1.05rem; box-shadow: var(--shadow-sm); }
 .resource-palette-topbar-actions .panel-add-button:disabled { opacity: 0.58; }
 .resource-palette-topbar-actions .panel-hide-button { width: 26px; height: 32px; background: transparent; color: var(--text-secondary); border-radius: var(--radius-sm); font-size: 1.15rem; }
-/* Extra left padding so the neighbouring panel's tab, which overhangs into
-   this one, never covers the label. */
-.panel-rail-header { display: flex; align-items: center; min-height: 26px; margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) 0; padding: 0 var(--space-3) 0 var(--space-8); background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-surface)); color: var(--accent-primary); border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent); font: var(--text-caption); font-weight: 850; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.panel-rail-header { display: flex; align-items: center; min-height: 26px; margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) 0; padding: 0 var(--space-3); background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-surface)); color: var(--accent-primary); border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent); font: var(--text-caption); font-weight: 850; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
 
 /* Collapse tabs hang off the workspace edge. A collapsed panel leaves its tab
    behind, so reopening is one click exactly where the panel was — no hunting
    in a toolbar for which icon corresponds to which panel. */
-/* Each tab is pinned to its panel's own outer (right) edge, positioned from the
-   same width variables the grid uses. Collapsing a panel sets its width to 0, so
-   the tab slides left with it — the panel slides off, the pull tab stays. That
-   is why the tab is not in the header toolbar: it is always exactly where its
-   panel is, open or closed. */
-.panel-tabs { position: absolute; z-index: 6; top: var(--space-3); left: 0; right: 0; height: 0; pointer-events: none; }
-.panel-tab { position: absolute; pointer-events: auto; display: flex; align-items: center; gap: var(--space-1); min-height: 26px; padding: 0 var(--space-2); background: var(--bg-surface); color: var(--text-secondary); border: 1px solid var(--border-default); border-left: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; box-shadow: var(--shadow-sm); transition: left var(--duration-base) var(--ease-out); }
-.panel-tab[data-panel="resource"] { left: var(--editor-resource-width); }
-.panel-tab[data-panel="inspector"] { left: calc(var(--editor-resource-width) + var(--editor-inspector-width)); }
-@media (prefers-reduced-motion: reduce) { .panel-tab { transition: none; } }
-.panel-tab:hover { color: var(--accent-primary); border-color: var(--accent-primary); }
-.panel-tab[aria-expanded="true"] { background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-surface)); color: var(--accent-primary); border-color: color-mix(in srgb, var(--accent-primary) 40%, transparent); }
 /* Open panels only need the chevron; the word is for finding a closed one. */
-.panel-tab[aria-expanded="true"] .panel-tab-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .editor-resize-handle { position: relative; z-index: 30; touch-action: none; }
 .editor-resize-handle::before { content: ""; position: absolute; background: transparent; transition: background var(--duration-fast) var(--ease-out); }
 .editor-resize-handle:hover::before, .editor-resize-handle:focus-visible::before, .is-resizing-editor .editor-resize-handle::before { background: var(--accent-primary); }
@@ -1128,7 +1113,10 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .add-slide-quick:hover:not(:disabled) { background: var(--bg-accent-soft); }
 .add-slide-split button:disabled { cursor: not-allowed; opacity: 0.55; }
 
-.add-slide-menu { display: grid; gap: var(--space-3); padding: var(--space-3); background: var(--bg-page); border: 1px solid var(--accent-primary); border-radius: var(--radius-sm); }
+/* Overlays the panel below rather than pushing it — opening the picker should
+   not shove Content and Design down the page. */
+.add-slide { position: relative; z-index: 20; }
+.add-slide-menu { position: absolute; z-index: 20; top: calc(100% + var(--space-2)); left: 0; right: 0; display: grid; gap: var(--space-3); max-height: 62vh; overflow-y: auto; padding: var(--space-3); background: var(--bg-surface); border: 1px solid var(--accent-primary); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); }
 .add-slide-menu-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .add-slide-menu-head strong { color: var(--text-secondary); font: var(--text-caption); font-weight: 850; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
 .add-slide-cancel { padding: var(--space-2); background: transparent; color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; }
