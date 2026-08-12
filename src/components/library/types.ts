@@ -16,16 +16,32 @@ export const VIEW_LABELS: Record<ViewMode, string> = {
   gallery: "Gallery",
 };
 
-/** A filter the shell renders and applies. `options` drives a checkbox group;
- *  counts come from the caller so they can be scoped correctly. */
+/** One filter group inside the combined filter panel. Groups stack in one
+ *  popover rather than one popover each — a row of dropdowns wraps badly and
+ *  makes people hunt (LIBRARIES.md §3.1). */
 export type FilterDef<T> = {
   id: string;
   label: string;
-  /** Single-select renders as radios (with a "Any" reset), multi as checkboxes. */
+  /** Single-select renders as radios, multi as checkboxes. */
   multiple?: boolean;
   options: Array<{ value: string; label: string; count?: number; hint?: string }>;
-  /** True when the item satisfies one selected value. */
   matches: (item: T, value: string) => boolean;
+};
+
+/**
+ * The one filter promoted out of the panel and onto the toolbar as a switch.
+ *
+ * Approved content is always visible; this only ever *adds* unapproved items to
+ * the view. Framing it as "show drafts" rather than a status multi-select means
+ * a salesperson cannot accidentally filter themselves into a draft-only list
+ * and ship from it (LIBRARIES.md §4.2).
+ */
+export type DraftToggleDef<T> = {
+  label: string;
+  hint?: string;
+  /** True when the item is unapproved and should be hidden unless toggled on. */
+  isDraft: (item: T) => boolean;
+  draftCount: number;
 };
 
 export type SortDef<T> = {
@@ -37,14 +53,11 @@ export type SortDef<T> = {
 export type BulkAction<T> = {
   id: string;
   label: string;
-  /** Rendered in a visually distinct destructive style and always confirmed. */
   destructive?: boolean;
   /** Null when available; a sentence when not — a disabled control without a
    *  stated reason is what makes people think the app is broken. */
   disabledReason?: (items: T[]) => string | null;
-  /** Return a status sentence to announce in the shell's live region. */
   run: (items: T[]) => Promise<string> | string;
-  /** Confirmation body. Receives the selection so it can name the blast radius. */
   confirm?: (items: T[]) => string;
 };
 
@@ -54,6 +67,10 @@ export type AddAction = {
   hint?: string;
   onSelect?: () => void;
   href?: string;
+  /** Renders visible-but-inert with the hint as the reason. Used for the v2
+   *  "create directly in the library" paths, so the shape of what is coming is
+   *  visible without pretending it works. */
+  comingSoon?: boolean;
 };
 
 export type Selection = {
@@ -64,23 +81,67 @@ export type Selection = {
   clear: () => void;
 };
 
+/* ------------------------------ Table view ------------------------------ */
+
+/**
+ * A column in the shared table view. Sorting lives on the header here rather
+ * than in the toolbar's Sort control, because in a table the header IS the
+ * sort affordance and two competing controls is worse than one.
+ */
+export type ColumnDef<T> = {
+  id: string;
+  label: string;
+  /** Cell contents. */
+  render: (item: T) => ReactNode;
+  /** Omit to make the column unsortable. */
+  compare?: (a: T, b: T) => number;
+  /** Structural columns (select, name) cannot be hidden. */
+  required?: boolean;
+  /** Hidden until the user turns it on in column settings. */
+  defaultHidden?: boolean;
+  width?: number;
+  minWidth?: number;
+  align?: "start" | "end";
+  /** Marks the row header cell — exactly one column should set this. */
+  isRowHeader?: boolean;
+};
+
+export type TableViewProps<T extends { id: string }> = {
+  items: T[];
+  columns: ColumnDef<T>[];
+  selection: Selection;
+  /** Persists column visibility and widths. */
+  storageKey: string;
+  rowLabel: (item: T) => string;
+  caption: string;
+};
+
+/* ------------------------------- The shell ------------------------------ */
+
 export type LibraryShellProps<T extends { id: string }> = {
   title: string;
-  /** Short sentence under the title. Optional; omit rather than pad. */
   description?: string;
   items: T[];
-  /** Free-text haystack per item; the shell owns the search input. */
   searchText: (item: T) => string;
   views: ViewMode[];
   renderView: (mode: ViewMode, items: T[], selection: Selection) => ReactNode;
   filters?: FilterDef<T>[];
+  draftToggle?: DraftToggleDef<T>;
   sorts: SortDef<T>[];
+  /** Table view drives sorting from its own headers, so the toolbar Sort
+   *  control is hidden for these modes. */
+  sortHiddenForViews?: ViewMode[];
   bulkActions?: BulkAction<T>[];
   addActions?: AddAction[];
-  /** Persists the view-mode preference. Unique per library. */
   storageKey: string;
+  /** Breadcrumb trail rendered above the title. The last entry is the current
+   *  page and is not a link. */
+  breadcrumbs?: Array<{ label: string; href?: string }>;
+  /** Status message. Rendered in a fixed slot below the header rather than
+   *  floated above it, so it can never overlap the breadcrumbs. */
+  notice?: string;
   emptyState: { heading: string; body: string; action?: ReactNode };
-  /** Shown when filters exclude everything — distinct from a truly empty
-   *  library, because the recovery action is different. */
   noResultsState?: { heading: string; body: string };
 };
+
+export const PAGE_SIZES = [24, 48, 96, 0] as const; // 0 = all

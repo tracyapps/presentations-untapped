@@ -66,15 +66,68 @@ status/category/tag/type/flag filters, four sorts, bulk approve/draft/
 categorize/tag/delete, per-user favorites, and usage counts (`Used in N decks`,
 computed with `jsonb_path_query` over the slide trees).
 
+### Library interface refinement pass (Aug 12, later)
+
+Driven by the first real test of `/library`. `npx tsc --noEmit` clean, eight test
+scripts passing. `next lint` and `next build` were not run — they need the
+platform `swc` binary and must run on the Mac.
+
+**Previews are real now.** `BlockPreview` renders the actual block tree through
+`BlockTree`, newly exported from `SlideCanvas` so there is one renderer rather
+than two. Blocks preview **bare** — no viewport, no 16:9 frame, no surface — and
+whole slides will preview as slides. That contrast is how the two libraries tell
+themselves apart (`LIBRARIES.md` §11).
+
+**Header is one row.** Search, drafts switch, one combined Filters panel, then
+view controls. Specifically:
+
+- Status became a **switch**, not a filter. Approved is always visible; the
+  switch only ever adds drafts.
+- Block type filter is gone — it cannot describe a nested group.
+- Category / Tags / Show-only are stacked inside one `FilterPanel` popover.
+- Active filters render as removable pills with a Clear all.
+- Sort moved below the toolbar in grid view and is **hidden in table view**,
+  where the column headers are the sort control. Sort, view mode, page size, and
+  column layout all persist per library in localStorage.
+
+**`DataTable`** — header-click sorting (asc → desc → off), keyboard-operable
+column resize (arrows nudge, Home resets), a column show/hide dialog with focus
+trap and restore, and `required` columns that cannot be hidden.
+
+**Pagination** — page size selector (24/48/96/All), first-last-window page
+numbers, page in the URL.
+
+**`/library/blocks/[id]`** — the single-item screen. Rename, description,
+category and tags, approval state, threaded discussion, history with real names,
+and delete in its own bordered region at the end. Rename and delete are gone
+from the grid card; the card is now navigation.
+
+**Attribution** — `src/lib/data/users.ts` resolves Clerk display names for
+`created_by` / `updated_by` / `approved_by`, request-cached. Comments are
+generalized to library items via `src/lib/data/comments.ts`.
+
+**Usage counts are real.** They were always 0 because inserted blocks carried no
+`link`. `insertLibraryItem` now stamps `{ itemId, version }` on the root node.
+Note this only counts blocks inserted **after** this change — anything added
+earlier still reads as unused until it is re-inserted or the full linked-block
+work (§9 step 7) backfills by payload match.
+
+**Fixed** — `.library-status` had a negative top margin that pulled notices over
+the breadcrumbs; notices now render in a fixed slot inside the shell. Library
+and detail headers match `.page-heading` rhythm, so the library no longer sits
+higher than the decks dashboard. The editor's save-to-library glyph is a
+bookmark; the star is now only ever a personal favorite.
+
 ### Next
 
 `LIBRARIES.md` §9 step 5 — the media library on the shell, then companies (6),
 linked blocks (7), the slide library (8), and variables in the editor (9).
 
-Two shortcuts taken in the block library that should be replaced when the shared
-`SaveToLibraryDialog` (§6.1) is built: the Categorize and Tag bulk actions use
-`window.prompt`, and single-item delete uses `window.confirm`. They work and are
-keyboard-accessible, but they are not the designed interaction.
+Known shortcuts to replace when the shared `SaveToLibraryDialog` (§6.1) is
+built: the Categorize and Tag **bulk** actions still use `window.prompt`, and
+bulk delete uses `window.confirm`. Single-item tagging is proper UI on the
+detail screen. Also still owed: comment resolve/unresolve, and the version
+dropdown above previews once variants exist.
 
 ## Current product state
 

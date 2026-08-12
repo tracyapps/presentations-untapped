@@ -90,6 +90,18 @@ export default function SlideCanvas({ doc, theme, editor }: { doc: SlideDoc; the
   );
 }
 
+/**
+ * Read-only render of a block subtree with no slide viewport, no surface, and no
+ * editing chrome — the block library's preview (LIBRARIES.md §4.2).
+ *
+ * Exported from here rather than reimplemented so a block previews as the same
+ * markup it will produce on a slide. The difference between the two libraries is
+ * exactly this: blocks preview bare, whole slides preview as slides.
+ */
+export function BlockTree({ nodes, theme }: { nodes: Node[]; theme: "light" | "dark" }) {
+  return <>{nodes.map((node) => <RenderNode node={node} theme={theme} key={node.id} />)}</>;
+}
+
 function NodeList({ className, nodes, parentId, axis, editor, dnd, style, theme }: { className: string; nodes: Node[]; parentId: string | null; axis: "horizontal" | "vertical"; editor: SlideCanvasEditor; dnd: BlockDndController; style?: React.CSSProperties; theme: "light" | "dark" }) {
   if (!nodes.length) {
     return <div className={`${className} is-empty-drop-container`} style={style}><BlockDropZone axis={axis} controller={dnd} target={{ parentId, index: 0 }} /></div>;
@@ -269,8 +281,10 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
           <IconTooltip label={<>Duplicate <em>block</em></>} description={`Create a copy of this ${node.type}.`}>
             <button type="button" onClick={() => editor.onDuplicate(node)} aria-label={`Duplicate ${node.type}`}>⧉</button>
           </IconTooltip>
+          {/* Bookmark, not a star: the star means "this is a personal favorite"
+              in the library, and one glyph cannot mean two things. */}
           <IconTooltip label={<>Save to <strong>library</strong></>} description="Keep a reusable copy of this block.">
-            <button type="button" onClick={() => editor.onSaveToLibrary(node)} aria-label={`Save ${node.type} to library`}>☆</button>
+            <button type="button" onClick={() => editor.onSaveToLibrary(node)} aria-label={`Save ${node.type} to library`}>🔖</button>
           </IconTooltip>
           {isLayout(node) && node.type === "columns" && node.children.length > 1 && <IconTooltip label={<>Swap <strong>columns</strong></>} description="Reverse the order of the column contents.">
             <button

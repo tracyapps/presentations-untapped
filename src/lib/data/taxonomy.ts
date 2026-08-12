@@ -144,6 +144,14 @@ export async function applyTags(input: {
   await db.insert(taggings).values(rows).onConflictDoNothing();
 }
 
+/** Tag ids currently on one subject. Used by the detail screen's tag editor,
+ *  which replaces the whole set rather than adding to it. */
+export async function getTagsForSubjectId(subjectType: SubjectType, subjectId: string): Promise<string[]> {
+  const rows = await db.select({ tagId: taggings.tagId }).from(taggings)
+    .where(and(eq(taggings.subjectType, subjectType), eq(taggings.subjectId, subjectId)));
+  return rows.map((row) => row.tagId);
+}
+
 export async function removeTags(input: {
   subjectType: SubjectType;
   subjectIds: string[];

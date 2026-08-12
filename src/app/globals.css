@@ -495,47 +495,85 @@ button, select { cursor: pointer; }
 .media-modal-footer > div { display: flex; gap: var(--space-2); }
 
 /* --- Shared library shell (LIBRARIES.md §3) ---------------------------
-   Every library page renders through this. Keep the toolbar, selection bar,
-   and view toggle identical across libraries; vary only the results slot. */
+   Every library page renders through this. Keep the breadcrumbs, toolbar,
+   selection bar, and view toggle identical across libraries; vary only the
+   results slot. Vertical rhythm matches .page-heading so the library and the
+   decks dashboard sit at the same height. */
 .lib { display: grid; gap: var(--space-5); }
-.lib-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
-.lib-header h1 { font: var(--text-h1); }
-.lib-header p { margin: var(--space-2) 0 0; max-width: 60ch; color: var(--text-secondary); font: var(--text-body-sm); }
+
+.lib-breadcrumbs { padding-top: var(--space-6); }
+.lib-breadcrumbs ol { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.lib-breadcrumbs li { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font: var(--text-caption); font-weight: 750; }
+.lib-breadcrumbs li + li::before { content: "/"; color: var(--border-strong); }
+.lib-breadcrumbs a { color: var(--text-secondary); text-decoration: none; }
+.lib-breadcrumbs a:hover { color: var(--accent-primary); text-decoration: underline; text-underline-offset: 3px; }
+.lib-breadcrumbs [aria-current="page"] { color: var(--text-primary); }
+
+.lib-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-5); margin-top: calc(var(--space-5) * -1); padding-top: var(--space-3); }
+.lib-header-text h1 { font: var(--text-display-md); }
+.lib-header-text p { margin: var(--space-2) 0 0; max-width: 64ch; color: var(--text-secondary); }
 
 .lib-add { position: relative; flex: none; }
-.lib-add-menu { position: absolute; z-index: 20; top: calc(100% + var(--space-2)); right: 0; display: grid; min-width: 260px; padding: var(--space-2); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
-.lib-add-menu > * { display: grid; gap: 2px; padding: var(--space-3); background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); text-align: left; text-decoration: none; }
-.lib-add-menu > *:hover { background: var(--bg-surface-raised); }
+.lib-add-menu { position: absolute; z-index: 20; top: calc(100% + var(--space-2)); right: 0; display: grid; min-width: 280px; padding: var(--space-2); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.lib-add-menu > * { display: grid; gap: 2px; margin: 0; padding: var(--space-3); background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); text-align: left; text-decoration: none; }
+.lib-add-menu > a:hover, .lib-add-menu > button:hover { background: var(--bg-surface-raised); }
 .lib-add-menu strong { font: var(--text-body-sm); font-weight: 750; }
 .lib-add-menu span { color: var(--text-secondary); font: var(--text-caption); }
+/* Visible but inert: shows the shape of what is coming without pretending it works. */
+.lib-add-soon { opacity: 0.55; }
 
-.lib-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-4); padding: var(--space-3) var(--space-4); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
-.lib-toolbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.lib-toolbar-end { margin-left: auto; }
-.lib-search { flex: 1 1 240px; min-width: 200px; }
-.lib-clear { padding: var(--space-2); background: transparent; color: var(--accent-primary); border: 0; font: var(--text-caption); font-weight: 750; text-decoration: underline; }
+/* One row by default. Search flexes, everything else keeps its intrinsic width,
+   and the view controls are pushed right with margin rather than a wrapper that
+   could wrap on its own. */
+.lib-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-3) var(--space-4); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+.lib-search { flex: 1 1 260px; min-width: 200px; }
+.lib-toolbar-end { display: flex; align-items: center; gap: var(--space-3); margin-inline-start: auto; }
 
-.lib-filter { position: relative; }
-.lib-filter > button { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 36px; padding: 0 var(--space-3); background: var(--bg-page); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 750; }
+/* Drafts switch — approved is always visible, this only ever adds drafts. */
+.lib-switch { display: inline-flex; align-items: center; gap: var(--space-2); flex: none; cursor: pointer; }
+.lib-switch input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.lib-switch-track { display: inline-flex; align-items: center; width: 38px; height: 22px; padding: 2px; background: var(--bg-page); border: 1px solid var(--border-strong); border-radius: var(--radius-pill); transition: background var(--duration-fast) var(--ease-out); }
+.lib-switch-track > span { width: 16px; height: 16px; background: var(--text-secondary); border-radius: 50%; transition: transform var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out); }
+.lib-switch input:checked + .lib-switch-track { background: var(--accent-primary); border-color: var(--accent-primary); }
+.lib-switch input:checked + .lib-switch-track > span { background: var(--text-on-accent); transform: translateX(16px); }
+.lib-switch input:focus-visible + .lib-switch-track { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.lib-switch-label { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-primary); font: var(--text-caption); font-weight: 750; white-space: nowrap; }
+.lib-switch-count { padding: 0 6px; background: var(--bg-page); color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font-variant-numeric: tabular-nums; }
+
+/* Combined filter panel — one trigger, all groups stacked inside. */
+.lib-filter { position: relative; flex: none; }
+.lib-filter > button { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 36px; padding: 0 var(--space-3); background: var(--bg-page); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 750; white-space: nowrap; }
 .lib-filter > button:hover { border-color: var(--border-strong); }
 .lib-filter > button.is-active { background: var(--bg-accent-soft); border-color: var(--accent-primary); }
-.lib-filter-panel { position: absolute; z-index: 20; top: calc(100% + var(--space-2)); left: 0; display: grid; gap: var(--space-2); min-width: 240px; max-height: 340px; overflow-y: auto; padding: var(--space-3); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
-.lib-filter-panel fieldset { display: grid; gap: 2px; padding: 0; border: 0; }
+.lib-filter-badge { min-width: 18px; padding: 0 5px; background: var(--accent-primary); color: var(--text-on-accent); border-radius: var(--radius-pill); font-variant-numeric: tabular-nums; text-align: center; }
+.lib-filter-panel { position: absolute; z-index: 20; top: calc(100% + var(--space-2)); left: 0; display: grid; gap: var(--space-4); min-width: 280px; max-height: 60vh; overflow-y: auto; padding: var(--space-4); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.lib-filter-panel fieldset { display: grid; gap: 2px; margin: 0; padding: 0; border: 0; }
+.lib-filter-panel legend { padding: 0 0 var(--space-2); color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
 .lib-filter-panel label { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-2); padding: var(--space-2); border-radius: var(--radius-sm); font: var(--text-body-sm); cursor: pointer; }
 .lib-filter-panel label:hover { background: var(--bg-surface-raised); }
 .lib-filter-label { display: grid; min-width: 0; }
 .lib-filter-label em { color: var(--text-secondary); font: var(--text-caption); font-style: normal; }
 .lib-filter-count { color: var(--text-secondary); font: var(--text-caption); font-variant-numeric: tabular-nums; }
 .lib-filter-empty { margin: 0; padding: var(--space-2); color: var(--text-secondary); font: var(--text-caption); }
-.lib-filter-reset { padding: var(--space-2); background: transparent; color: var(--accent-primary); border: 0; border-top: 1px solid var(--border-default); font: var(--text-caption); font-weight: 750; text-align: left; }
+.lib-filter-reset { padding: var(--space-3) var(--space-2) 0; background: transparent; color: var(--accent-primary); border: 0; border-top: 1px solid var(--border-default); font: var(--text-caption); font-weight: 750; text-align: left; }
 
-/* Selection bar: appears in flow rather than overlaying content, and never
-   steals focus when it arrives. */
+/* Active-filter pills. Present only when something is filtered, so the header
+   never reserves height it is not using. */
+.lib-pills { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.lib-pills-label { color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.lib-pill { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 30px; padding: 0 var(--space-2) 0 var(--space-3); background: var(--bg-accent-soft); color: var(--text-primary); border: 1px solid var(--accent-primary); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 750; }
+.lib-pill:hover { background: var(--accent-primary); color: var(--text-on-accent); }
+.lib-pills-clear { padding: var(--space-1) var(--space-2); background: transparent; color: var(--accent-primary); border: 0; font: var(--text-caption); font-weight: 750; text-decoration: underline; }
+
+.lib-subbar { display: flex; align-items: center; gap: var(--space-3); }
+
+/* Selection bar: in flow rather than overlaying content, and it does not steal
+   focus when it appears. */
 .lib-selection { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); background: var(--bg-accent-soft); border: 1px solid var(--accent-primary); border-radius: var(--radius-md); }
 .lib-selection-all { display: flex; align-items: center; gap: var(--space-2); font: var(--text-body-sm); font-weight: 750; }
 .lib-selection-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .lib-selection-actions button { min-height: 34px; padding: 0 var(--space-3); background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; }
-.lib-selection-actions button:hover:not(:disabled) { border-color: var(--border-strong); }
+.lib-selection-actions button:hover:not([data-disabled]) { border-color: var(--border-strong); }
 /* aria-disabled, not :disabled — see LibraryShell.tsx. Styled the same, but the
    control stays focusable so its reason can actually be read. */
 .lib-selection-actions button[data-disabled] { cursor: not-allowed; opacity: 0.55; }
@@ -549,13 +587,21 @@ button, select { cursor: pointer; }
 .lib-views button.is-active { background: var(--bg-surface); color: var(--accent-primary); box-shadow: var(--shadow-sm); }
 
 .lib-results[data-pending] { opacity: 0.6; transition: opacity var(--duration-fast) var(--ease-out); }
-.lib-count { margin: 0; color: var(--text-secondary); font: var(--text-caption); }
 
-@media (prefers-reduced-motion: reduce) { .lib-results { transition: none; } }
+.lib-footer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); padding-top: var(--space-3); border-top: 1px solid var(--border-default); }
+.lib-count { margin: 0; color: var(--text-secondary); font: var(--text-caption); font-variant-numeric: tabular-nums; }
+.lib-page-size { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font: var(--text-caption); }
+.lib-page-size select { min-height: 32px; padding: 0 var(--space-2); background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-caption); }
+.lib-pagination { display: inline-flex; align-items: center; gap: 2px; margin-inline-start: auto; }
+.lib-pagination button { min-width: 34px; min-height: 34px; padding: 0 var(--space-2); background: transparent; color: var(--text-primary); border: 1px solid transparent; border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; font-variant-numeric: tabular-nums; }
+.lib-pagination button:hover:not([data-disabled]) { background: var(--bg-surface-raised); border-color: var(--border-default); }
+.lib-pagination button.is-current { background: var(--accent-primary); color: var(--text-on-accent); }
+.lib-pagination button[data-disabled] { cursor: not-allowed; opacity: 0.4; }
+.lib-pagination-gap { padding: 0 var(--space-1); color: var(--text-secondary); }
 
-.lib-nav { display: flex; gap: var(--space-4); }
-.lib-nav a { color: var(--text-secondary); font: var(--text-body-sm); font-weight: 750; text-decoration: none; }
-.lib-nav a[aria-current="page"] { color: var(--accent-primary); text-decoration: underline; text-underline-offset: 4px; }
+@media (prefers-reduced-motion: reduce) {
+  .lib-results, .lib-switch-track, .lib-switch-track > span { transition: none; }
+}
 
 /* --- Block library items ---------------------------------------------
    Status is never colour-only: the pill carries a glyph and its own word so it
@@ -569,52 +615,149 @@ button, select { cursor: pointer; }
 .lib-tag { display: inline-block; padding: 2px var(--space-2); background: var(--bg-page); color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font: var(--text-caption); }
 .lib-tag.is-category { background: var(--bg-blue-soft); color: var(--text-primary); border-color: var(--border-strong); font-weight: 750; }
 .lib-tag.is-missing { color: var(--text-secondary); border-style: dashed; font-style: italic; }
+.lib-tag.is-more { color: var(--text-secondary); }
 .lib-muted { color: var(--text-secondary); }
 
-.lib-block-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-5); }
+.lib-block-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-5); }
 .lib-block-card { position: relative; display: grid; grid-template-rows: auto 1fr; min-width: 0; overflow: hidden; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
 .lib-block-card[data-status="draft"] { border-style: dashed; border-color: var(--border-strong); }
 .lib-block-card[data-selected] { border-color: var(--accent-primary); border-style: solid; box-shadow: 0 0 0 2px var(--accent-primary); }
-.lib-block-select { position: absolute; z-index: 2; top: var(--space-3); left: var(--space-3); }
+.lib-block-select { position: absolute; z-index: 3; top: var(--space-3); left: var(--space-3); }
 .lib-block-select input { width: 18px; height: 18px; }
-.lib-block-star { position: absolute; z-index: 2; top: var(--space-2); right: var(--space-2); padding: var(--space-1) var(--space-2); background: transparent; color: var(--text-secondary); border: 0; border-radius: var(--radius-sm); font-size: 18px; line-height: 1; }
+.lib-block-star { position: absolute; z-index: 3; top: var(--space-2); right: var(--space-2); padding: var(--space-1) var(--space-2); background: transparent; color: var(--text-secondary); border: 0; border-radius: var(--radius-sm); font-size: 18px; line-height: 1; }
 .lib-block-star:hover, .lib-block-star.is-on { color: var(--accent-primary); }
 
-.lib-block-preview { aspect-ratio: 16 / 8; display: flex; flex-direction: column; justify-content: center; gap: var(--space-2); padding: var(--space-5); background: var(--bg-page); border-bottom: 1px solid var(--border-default); }
-.lib-block-type { color: var(--accent-primary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
-.lib-block-preview p { display: -webkit-box; overflow: hidden; margin: 0; color: var(--text-primary); font: var(--text-h3); -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.lib-block-preview { position: relative; background: var(--bg-page); border-bottom: 1px solid var(--border-default); }
+
+/* A real render of the block, scaled — not a text stand-in. Blocks preview
+   bare; whole slides preview in their 16:9 frame. That contrast is how the two
+   reusable libraries tell themselves apart (LIBRARIES.md §4.2). */
+.lib-preview { position: relative; overflow: hidden; padding: var(--space-4); }
+.lib-preview-content { transform-origin: top left; pointer-events: none; }
+/* Fade the clip so a tall block reads as continuing rather than as cut off. */
+.lib-preview::after { content: ""; position: absolute; inset-inline: 0; bottom: 0; height: var(--space-6); background: linear-gradient(to bottom, transparent, var(--bg-page)); pointer-events: none; }
 
 .lib-block-body { display: grid; align-content: start; gap: var(--space-2); padding: var(--space-4); }
 .lib-block-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
 .lib-block-heading h2 { overflow-wrap: anywhere; font: var(--text-body); font-weight: 800; }
-.lib-block-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: 0; }
+.lib-block-heading a { color: var(--text-primary); text-decoration: none; }
+.lib-block-heading a:hover { color: var(--accent-primary); text-decoration: underline; text-underline-offset: 3px; }
+/* One clear primary link on the title, stretched over the card. The card itself
+   is not a link, so the checkbox and star are not nested interactives. */
+.lib-block-heading a::after { content: ""; position: absolute; inset: 0; z-index: 1; }
+.lib-block-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: 0; position: relative; z-index: 2; }
 .lib-block-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-secondary); font: var(--text-caption); }
-.lib-block-actions { display: flex; gap: var(--space-1); margin-top: var(--space-1); }
-.lib-block-actions button { padding: var(--space-1) var(--space-2); background: transparent; color: var(--text-secondary); border: 1px solid transparent; border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; }
-.lib-block-actions button:hover { background: var(--bg-surface-raised); color: var(--text-primary); border-color: var(--border-default); }
-.lib-block-actions button.is-danger:hover { color: var(--status-danger); border-color: var(--status-danger); }
-.lib-block-body form { display: grid; gap: var(--space-3); }
-.lib-block-body form input { width: 100%; min-height: 40px; padding: var(--space-2) var(--space-3); background: var(--bg-page); color: var(--text-primary); border: 1px solid var(--accent-primary); border-radius: var(--radius-sm); }
-.lib-block-body form > div { display: flex; justify-content: flex-end; gap: var(--space-2); }
-.lib-block-body form .button { min-height: 36px; padding-inline: var(--space-3); font: var(--text-caption); font-weight: 750; }
 
-.lib-table { width: 100%; border-collapse: collapse; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); overflow: hidden; }
-.lib-table th, .lib-table td { padding: var(--space-3) var(--space-4); text-align: left; vertical-align: middle; border-bottom: 1px solid var(--border-default); }
-.lib-table thead th { background: var(--bg-page); color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+/* --- Shared table view ------------------------------------------------ */
+.lib-table-wrap { display: grid; gap: var(--space-3); }
+.lib-table-tools { display: flex; justify-content: flex-end; }
+.lib-table-settings-trigger { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 32px; padding: 0 var(--space-3); background: transparent; color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; }
+.lib-table-settings-trigger:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.lib-table-scroll { overflow-x: auto; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
+.lib-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.lib-table th, .lib-table td { overflow: hidden; padding: var(--space-3) var(--space-4); text-align: left; vertical-align: middle; border-bottom: 1px solid var(--border-default); text-overflow: ellipsis; }
+.lib-table th[data-align="end"], .lib-table td[data-align="end"] { text-align: right; }
+.lib-table thead th { position: relative; background: var(--bg-page); color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
 .lib-table tbody tr:last-child th, .lib-table tbody tr:last-child td { border-bottom: 0; }
 .lib-table tbody tr:hover { background: var(--bg-surface-raised); }
 .lib-table tbody tr[data-selected] { background: var(--bg-accent-soft); }
 .lib-table tbody th { font-weight: 400; }
-.lib-table tbody th strong { display: block; font: var(--text-body-sm); font-weight: 800; }
-.lib-table tbody th span { display: block; overflow: hidden; max-width: 46ch; color: var(--text-secondary); font: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
 .lib-table td { font: var(--text-body-sm); }
-.lib-numeric { font-variant-numeric: tabular-nums; }
+.lib-table-name { display: block; color: var(--text-primary); font: var(--text-body-sm); font-weight: 800; text-decoration: none; }
+.lib-table-name:hover { color: var(--accent-primary); text-decoration: underline; text-underline-offset: 3px; }
+.lib-table-gist { display: block; overflow: hidden; color: var(--text-secondary); font: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+
+/* The header IS the sort control in a table, so the toolbar's Sort is hidden
+   for this view rather than duplicated. */
+.lib-th-sort { display: inline-flex; align-items: center; gap: var(--space-2); padding: 0; background: transparent; color: inherit; border: 0; font: inherit; letter-spacing: inherit; text-transform: inherit; }
+.lib-th-sort:hover { color: var(--text-primary); }
+.lib-th-arrow[data-state="off"] { opacity: 0.35; }
+.lib-col-resize { position: absolute; inset-block: 0; right: -4px; z-index: 2; width: 9px; cursor: col-resize; }
+.lib-col-resize::before { content: ""; position: absolute; inset-block: 25%; left: 4px; width: 1px; background: var(--border-default); }
+.lib-col-resize:hover::before, .lib-col-resize:focus-visible::before { inset-block: 0; width: 2px; background: var(--accent-primary); }
+.lib-col-resize:focus-visible { outline: none; }
+body.is-resizing-column { cursor: col-resize; user-select: none; }
+
+/* --- Library modal (column settings; reused later) -------------------- */
+.lib-modal-backdrop { position: fixed; z-index: 60; inset: 0; display: grid; place-items: center; padding: var(--space-5); background: hsl(var(--shadow-color) / 0.55); }
+.lib-modal { width: min(420px, 100%); max-height: 80vh; overflow-y: auto; padding: var(--space-5); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.lib-modal h2 { font: var(--text-h3); }
+.lib-modal > p { margin: var(--space-2) 0 var(--space-4); color: var(--text-secondary); font: var(--text-body-sm); }
+.lib-modal fieldset { display: grid; gap: 2px; margin: 0; padding: 0; border: 0; }
+.lib-modal fieldset label { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); border-radius: var(--radius-sm); font: var(--text-body-sm); }
+.lib-modal fieldset label:hover { background: var(--bg-surface-raised); }
+.lib-modal fieldset em { margin-left: auto; color: var(--text-secondary); font: var(--text-caption); font-style: normal; }
+.lib-modal-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-5); }
+
+/* --- Single-item detail screen (LIBRARIES.md §4.2) -------------------- */
+.lib-detail { display: grid; gap: var(--space-5); }
+.lib-detail-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-5); margin-top: calc(var(--space-5) * -1); padding-top: var(--space-3); }
+.lib-detail-header h1 { font: var(--text-display-md); overflow-wrap: anywhere; }
+.lib-detail-sub { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-3) 0 0; color: var(--text-secondary); font: var(--text-caption); }
+.lib-detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; align-items: start; gap: var(--space-5); }
+.lib-detail-main, .lib-detail-side { display: grid; gap: var(--space-5); min-width: 0; }
+
+.lib-panel { padding: var(--space-5); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+.lib-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
+.lib-panel h2 { font: var(--text-h3); }
+.lib-panel-note { margin: var(--space-3) 0 0; color: var(--text-secondary); font: var(--text-caption); line-height: 1.5; }
+.lib-panel-head .lib-panel-note { margin: 0; }
+.lib-detail-preview { background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+/* Delete gets its own bordered region at the end of the page rather than a
+   button on a card you are scanning quickly. */
+.lib-panel.is-danger-zone { border-color: var(--status-danger); }
+.lib-panel.is-danger-zone h2 { color: var(--status-danger); font: var(--text-body); font-weight: 800; }
+
+.lib-form { display: grid; gap: var(--space-4); }
+.lib-form .field { display: grid; gap: var(--space-2); }
+.lib-form .field > span { font: var(--text-body-sm); font-weight: 750; }
+.lib-form .field em { display: block; margin-top: 2px; color: var(--text-secondary); font: var(--text-caption); font-style: normal; font-weight: 400; }
+.lib-form input, .lib-form textarea { width: 100%; padding: var(--space-2) var(--space-3); background: var(--bg-page); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-body-sm); }
+.lib-form input { min-height: 40px; }
+.lib-form textarea { resize: vertical; }
+.lib-form-actions { display: flex; align-items: center; gap: var(--space-3); }
+.lib-form-actions .button[data-disabled] { cursor: not-allowed; opacity: 0.55; }
+.lib-dirty { color: var(--status-warning); font: var(--text-caption); font-weight: 750; }
+
+.button-danger { background: var(--status-danger); color: var(--lu-white); border-color: var(--status-danger); }
+.button-danger[data-disabled] { cursor: not-allowed; opacity: 0.55; }
+
+.lib-approval { display: inline-flex; gap: 2px; padding: 2px; background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+.lib-approval-step { padding: var(--space-2) var(--space-3); background: transparent; color: var(--text-secondary); border: 0; border-radius: calc(var(--radius-sm) - 2px); font: var(--text-caption); font-weight: 750; }
+.lib-approval-step:hover:not([data-disabled]) { color: var(--text-primary); }
+.lib-approval-step.is-current { background: var(--accent-primary); color: var(--text-on-accent); }
+
+.lib-meta-list { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-4); margin: 0; font: var(--text-caption); }
+.lib-meta-list dt { color: var(--text-secondary); font-weight: 800; }
+.lib-meta-list dd { margin: 0; color: var(--text-primary); }
+.lib-meta-list time { color: var(--text-secondary); }
+
+.lib-comment-form { display: grid; gap: var(--space-3); justify-items: start; }
+.lib-comment-form label { width: 100%; }
+.lib-comment-form textarea { width: 100%; padding: var(--space-3); background: var(--bg-page); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-body-sm); resize: vertical; }
+.lib-comment-form .button[data-disabled] { cursor: not-allowed; opacity: 0.55; }
+.lib-comment-form.is-reply { margin-top: var(--space-3); padding-left: var(--space-5); }
+.lib-comment-form.is-reply > div { display: flex; gap: var(--space-2); }
+
+.lib-comments { display: grid; gap: var(--space-4); margin: var(--space-5) 0 0; padding: 0; list-style: none; }
+.lib-comments.is-replies { margin: var(--space-3) 0 0; padding-left: var(--space-5); border-left: 2px solid var(--border-default); }
+.lib-comment header { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+.lib-comment strong { font: var(--text-body-sm); font-weight: 800; }
+.lib-comment time { color: var(--text-secondary); font: var(--text-caption); }
+.lib-comment p { margin: 0; color: var(--text-primary); font: var(--text-body-sm); line-height: 1.6; white-space: pre-wrap; }
+.lib-avatar { display: grid; place-items: center; width: 26px; height: 26px; background: var(--bg-accent-soft); color: var(--accent-primary); border-radius: 50%; font: var(--text-caption); font-weight: 800; }
+.lib-comment-reply { margin-top: var(--space-2); padding: var(--space-1) 0; background: transparent; color: var(--accent-primary); border: 0; font: var(--text-caption); font-weight: 750; }
+
+@media (max-width: 900px) {
+  .lib-detail-grid { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* --- Reusable content library ----------------------------------- */
 .library-manager { display: grid; gap: var(--space-5); }
 .library-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) auto; align-items: center; gap: var(--space-4); padding: var(--space-4); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
 .library-toolbar > span { color: var(--text-secondary); font: var(--text-body-sm); }
-.library-status { margin: calc(var(--space-2) * -1) 0 0; padding: var(--space-3) var(--space-4); background: var(--bg-teal-soft); color: var(--text-primary); border-radius: var(--radius-sm); }
+/* No negative margin: it used to pull this over the breadcrumbs. */
+.library-status { margin: 0; padding: var(--space-3) var(--space-4); background: var(--bg-teal-soft); color: var(--text-primary); border-radius: var(--radius-sm); }
 .library-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-5); }
 .library-card { min-width: 0; overflow: hidden; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
 .library-card-preview { aspect-ratio: 16 / 8; display: flex; flex-direction: column; justify-content: center; gap: var(--space-2); padding: var(--space-5); background: var(--bg-page); border-bottom: 1px solid var(--border-default); }

@@ -372,8 +372,15 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   }
 
   function insertLibraryItem(item: LibraryBlockItem) {
-    markDoc({ ...docRef.current, blocks: [...docRef.current.blocks, cloneNode(item.node)] });
-    setLibraryNotice(`Added a copy of “${item.name}” to slide ${initialSlide.position}.`);
+    // Stamp the library link on the root node. The full linked-block behavior
+    // (grouped chrome, detach, edit-at-source) is LIBRARIES.md §9 step 7, but
+    // recording the link now is what makes "Used in N decks" real — without it
+    // an inserted block is indistinguishable from one typed by hand.
+    const inserted = cloneNode(item.node);
+    inserted.link = { itemId: item.id, version: item.version };
+
+    markDoc({ ...docRef.current, blocks: [...docRef.current.blocks, inserted] });
+    setLibraryNotice(`Added “${item.name}” to slide ${initialSlide.position}.`);
   }
 
   function registerMedia(asset: MediaAsset) {

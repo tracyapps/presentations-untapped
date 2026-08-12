@@ -4,10 +4,10 @@ import { auth } from "@clerk/nextjs/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { libraryItems } from "@/lib/db/schema";
+import { comments, libraryItems } from "@/lib/db/schema";
 import { can } from "@/lib/auth/policy";
 import {
-  applyTags, ensureTag, sweepTaggings, toggleFavorite,
+  applyTags, ensureTag, getTagsForSubjectId, removeTags, sweepTaggings, toggleFavorite,
   type TagKind,
 } from "@/lib/data/taxonomy";
 
@@ -173,4 +173,104 @@ export async function tagLibraryItemsAction(
 /** Kept for the single-item delete path still used by older call sites. */
 export async function deleteLibraryItemAction(id: string): Promise<ManageLibraryResult> {
   return deleteLibraryItemsAction([id]);
+}
+
+/* ------------------------- Detail-screen actions ---------------------- */
+
+export async function updateLibraryItemAction(
+  input: { id: string; name: string; description: string },
+): Promise<ManageLibraryResult> {
+  const gate = await guard([input.id], "library.edit");
+  if (!gate.ok) return { status: "error", message: gate.error };
+
+  const name = input.name.trim();
+  if (!name) return { status: "error", message: "Give this block a name." };
+  if (name.length > 100) return { status: "error", message: "Names must be 100 characters or fewer." };
+  if (input.description.length > 500) return { status: "error", message: "Descriptions must be 500 characters or fewer." };
+
+  try {
+    const updated = await db.update(libraryItems)
+      .set({
+        name,
+        description: input.description.trim() || null,
+        updatedBy: gate.userId,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(libraryItems.id, input.id), eq(libraryItems.kind, "block")))
+      .returning({ id: libraryItems.id });
+    if (!updated.length) return { status: "error", message: "That block no longer exists." };
+
+    revalidatePath("/library");
+    revalidatePath(`/library/blocks/${input.id}`);
+    return { status: "complete", name, message: "Saved." };
+  } catch (error) {
+    console.error("Failed to update library item", error);
+    return { status: "error", message: "That change did not save. Try again." };
+  }
+}
+
+/** Replaces the whole tag set for one item — what the detail screen's tag editor
+ *  needs, versus the additive bulk action. */
+export async function setLibraryItemTagsAction(
+  input: { id: string; categoryName: string; tagNames: string[] },
+): Promise<ManageLibraryResult> {
+  const gate = await guard([input.id], "library.edit");
+  if (!gate.ok) return { status: "error", message: gate.error };
+
+  try {
+    const existing = await getTagsForSubjectId("library_item", input.id);
+    if (existing.length) {
+      await removeTags({ subjectType: "library_item", subjectIds: [input.id], tagIds: existing });
+    }
+
+    const tagIds: string[] = [];
+    if (input.categoryName.trim()) {
+      const category = await ensureTag({ name: input.categoryName, kind: "category", createdBy: gate.userId });
+      tagIds.push(category.id);
+    }
+    for (const name of input.tagNames.map((value) => value.trim()).filter(Boolean).slice(0, 20)) {
+      const tag = await ensureTag({ name, kind: "tag", createdBy: gate.userId });
+      tagIds.push(tag.id);
+    }
+    if (tagIds.length) {
+      await applyTags({ subjectType: "library_item", subjectIds: [input.id], tagIds, createdBy: gate.userId });
+    }
+
+    await db.update(libraryItems)
+      .set({ updatedBy: gate.userId, updatedAt: new Date() })
+      .where(eq(libraryItems.id, input.id));
+
+    revalidatePath("/library");
+    revalidatePath(`/library/blocks/${input.id}`);
+    return { status: "complete", message: "Tags updated." };
+  } catch (error) {
+    console.error("Failed to set library item tags", error);
+    return { status: "error", message: "Those tags did not save. Nothing was changed." };
+  }
+}
+
+export async function addCommentAction(
+  input: { subjectId: string; body: string; parentId?: string },
+): Promise<ManageLibraryResult> {
+  const gate = await guard([input.subjectId], "library.edit");
+  if (!gate.ok) return { status: "error", message: gate.error };
+
+  const body = input.body.trim();
+  if (!body) return { status: "error", message: "Write something first." };
+  if (body.length > 4000) return { status: "error", message: "Comments must be 4000 characters or fewer." };
+
+  try {
+    await db.insert(comments).values({
+      subjectType: "library_item",
+      subjectId: input.subjectId,
+      parentId: input.parentId ?? null,
+      authorId: gate.userId,
+      body,
+    });
+    revalidatePath(`/library/blocks/${input.subjectId}`);
+    return { status: "complete", message: input.parentId ? "Reply posted." : "Comment posted." };
+  } catch (error) {
+    console.error("Failed to add comment", error);
+    return { status: "error", message: "That comment did not post. Your text is still in the box — try again." };
+  }
 }

@@ -89,6 +89,11 @@ export async function saveBlockToLibraryAction(input: {
         updatedBy: null,
         createdAt: saved.createdAt.toISOString(),
         updatedAt: saved.updatedAt.toISOString(),
+        // Attribution is resolved server-side on the library pages; the editor
+        // palette only needs the name and payload to insert it.
+        author: null,
+        editor: null,
+        approver: null,
         tags: [],
         category: null,
         favorited: false,

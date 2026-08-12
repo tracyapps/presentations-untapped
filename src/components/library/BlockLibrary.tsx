@@ -3,19 +3,23 @@
 /**
  * The block library — first consumer of the shared shell (LIBRARIES.md §4.2).
  *
- * The load-bearing detail here is status. Draft and approved are rendered with
- * unmistakably different treatment, not a subtle pill, because the failure this
- * prevents is a salesperson unknowingly shipping unapproved copy to a client.
+ * Cards are now navigation, not workbenches: name, preview, status, tags, and a
+ * favorite toggle. Rename, delete, tagging, approval, and discussion all live on
+ * the item's own screen, which keeps destructive actions away from a grid you
+ * are scanning quickly.
  */
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import LibraryShell from "./LibraryShell";
-import type { BulkAction, FilterDef, SortDef, Selection } from "./types";
+import DataTable from "./DataTable";
+import BlockPreview from "./BlockPreview";
+import type { BulkAction, ColumnDef, FilterDef, SortDef, Selection } from "./types";
 import type { LibraryBlockItem } from "@/lib/data/library";
 import type { Tag } from "@/lib/data/taxonomy";
 import type { Node, RichText } from "@/lib/slides/types";
 import { isLayout } from "@/lib/slides/types";
 import {
-  deleteLibraryItemsAction, renameLibraryItemAction, setLibraryStatusAction,
+  deleteLibraryItemsAction, setLibraryStatusAction,
   tagLibraryItemsAction, toggleFavoriteAction,
 } from "@/app/library/actions";
 
@@ -29,24 +33,24 @@ function text(value: RichText): string {
   return value.map((part) => part.text).join("");
 }
 
-/** A readable one-line gist of any block, used for search and the preview. */
+/** A readable one-line gist of any block — the search haystack and the list
+ *  view's secondary line. The grid uses a real render instead. */
 export function nodeSummary(node: Node): string {
-  if (isLayout(node)) return `${node.type} · ${node.children.length} ${node.children.length === 1 ? "block" : "blocks"}`;
+  if (isLayout(node)) {
+    const inner = node.children.map(nodeSummary).filter(Boolean).join(" · ");
+    return inner || `${node.type} layout`;
+  }
   switch (node.type) {
     case "title": case "tagline": case "blockquote":
     case "callout": case "paragraph": return text(node.props.text) || node.type;
     case "statCard": return `${node.props.value} · ${node.props.label}`;
-    case "image": return node.props.alt || "Image block";
+    case "image": return node.props.alt || "Image";
     case "list": return node.props.items.map(text).join(" · ");
     case "process": return node.props.steps.map((step) => step.title).join(" → ");
     case "table": return node.props.header.join(" · ");
     case "pricingTable": return node.props.columns.map((column) => column.name).join(" · ");
     case "chart": return `${node.props.chartType} chart · ${node.props.labels.join(", ")}`;
   }
-}
-
-function typeLabel(node: Node): string {
-  return node.type.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase());
 }
 
 export default function BlockLibrary({
@@ -56,23 +60,15 @@ export default function BlockLibrary({
   categories: Array<{ id: string; name: string; count: number }>;
   tagOptions: Array<{ id: string; name: string; count: number }>;
 }) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftName, setDraftName] = useState("");
   const [notice, setNotice] = useState("");
   const [, startTransition] = useTransition();
 
   /* ------------------------------ Filters ----------------------------- */
+  /* Status is deliberately absent: it is promoted to the drafts switch in the
+     toolbar. Block type is gone too — it cannot describe a nested group, and
+     what people are hunting for is the content, not the shape. */
 
   const filters: FilterDef<LibraryBlockItem>[] = [
-    {
-      id: "status", label: "Status", multiple: true,
-      options: (["approved", "in_review", "draft"] as const).map((status) => ({
-        value: status,
-        label: STATUS_LABELS[status],
-        count: items.filter((item) => item.status === status).length,
-      })),
-      matches: (item, value) => item.status === value,
-    },
     {
       id: "category", label: "Category", multiple: true,
       options: categories.map((c) => ({ value: c.id, label: c.name, count: c.count })),
@@ -84,18 +80,9 @@ export default function BlockLibrary({
       matches: (item, value) => item.tags.some((tag) => tag.id === value),
     },
     {
-      id: "type", label: "Block type", multiple: true,
-      options: [...new Set(items.map((item) => item.node.type))].sort().map((type) => ({
-        value: type,
-        label: type.replace(/([A-Z])/g, " $1").replace(/^./, (l) => l.toUpperCase()),
-        count: items.filter((item) => item.node.type === type).length,
-      })),
-      matches: (item, value) => item.node.type === value,
-    },
-    {
-      id: "flag", label: "Show", multiple: true,
+      id: "flag", label: "Show only", multiple: true,
       options: [
-        { value: "favorites", label: "Favorites only", count: items.filter((i) => i.favorited).length },
+        { value: "favorites", label: "My favorites", count: items.filter((i) => i.favorited).length },
         { value: "untagged", label: "Needs tagging", hint: "No category or tags", count: items.filter((i) => !i.category && !i.tags.length).length },
         { value: "unused", label: "Not used in any deck", count: items.filter((i) => i.usageCount === 0).length },
       ],
@@ -170,18 +157,6 @@ export default function BlockLibrary({
     },
   ];
 
-  /* ------------------------------ Actions ------------------------------ */
-
-  function rename(item: LibraryBlockItem) {
-    const name = draftName.trim();
-    if (!name) return;
-    startTransition(async () => {
-      const result = await renameLibraryItemAction({ id: item.id, name });
-      setNotice(result.status === "error" ? result.message : `Renamed to “${name}”.`);
-      if (result.status === "complete") setEditingId(null);
-    });
-  }
-
   function favorite(item: LibraryBlockItem) {
     startTransition(async () => {
       const result = await toggleFavoriteAction(item.id);
@@ -189,143 +164,144 @@ export default function BlockLibrary({
     });
   }
 
-  /* ------------------------------ Views -------------------------------- */
+  /* ------------------------------- Views ------------------------------- */
 
   function renderCard(item: LibraryBlockItem, index: number, selection: Selection) {
     const checkboxId = `select-${item.id}`;
     return (
       <article
-        key={item.id}
-        className="lib-block-card"
-        data-status={item.status}
+        key={item.id} className="lib-block-card" data-status={item.status}
         data-selected={selection.isSelected(item.id) || undefined}
       >
         <div className="lib-block-select">
           <input
-            id={checkboxId} type="checkbox"
-            checked={selection.isSelected(item.id)}
-            onChange={(event) => selection.toggle(
-              item.id, index,
-              (event.nativeEvent as MouseEvent).shiftKey,
-            )}
+            id={checkboxId} type="checkbox" checked={selection.isSelected(item.id)}
+            onChange={(event) => selection.toggle(item.id, index, (event.nativeEvent as MouseEvent).shiftKey)}
           />
           <label htmlFor={checkboxId} className="sr-only">Select {item.name}</label>
         </div>
 
+        {/* Star = my favorite. The bookmark in the editor means "save to
+            library" — one glyph cannot mean two things. */}
         <button
-          type="button"
-          className={`lib-block-star${item.favorited ? " is-on" : ""}`}
-          aria-pressed={item.favorited}
-          onClick={() => favorite(item)}
+          type="button" className={`lib-block-star${item.favorited ? " is-on" : ""}`}
+          aria-pressed={item.favorited} onClick={() => favorite(item)}
         >
           <span aria-hidden="true">{item.favorited ? "★" : "☆"}</span>
-          <span className="sr-only">{item.favorited ? "Remove" : "Add"} {item.name} {item.favorited ? "from" : "to"} favorites</span>
+          <span className="sr-only">
+            {item.favorited ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
+          </span>
         </button>
 
         <div className="lib-block-preview">
-          <span className="lib-block-type">{typeLabel(item.node)}</span>
-          <p>{nodeSummary(item.node)}</p>
+          <BlockPreview node={item.node} />
         </div>
 
         <div className="lib-block-body">
-          {editingId === item.id ? (
-            <form onSubmit={(event) => { event.preventDefault(); rename(item); }}>
-              <label>
-                <span className="sr-only">Block name</span>
-                <input autoFocus maxLength={100} value={draftName}
-                  onChange={(event) => setDraftName(event.target.value)} />
-              </label>
-              <div>
-                <button type="button" className="button button-secondary" onClick={() => setEditingId(null)}>Cancel</button>
-                <button type="submit" className="button button-primary" disabled={!draftName.trim()}>Save</button>
-              </div>
-            </form>
-          ) : (
-            <>
-              <div className="lib-block-heading">
-                <h2>{item.name}</h2>
-                <StatusPill status={item.status} />
-              </div>
+          <div className="lib-block-heading">
+            <h2><Link href={`/library/blocks/${item.id}`}>{item.name}</Link></h2>
+            <StatusPill status={item.status} />
+          </div>
 
-              <TagRow category={item.category} tags={item.tags} />
+          <TagRow category={item.category} tags={item.tags} />
 
-              <p className="lib-block-meta">
-                <span>v{item.version}</span>
-                <span aria-hidden="true">·</span>
-                <span>{item.usageCount > 0 ? `Used in ${item.usageCount} ${item.usageCount === 1 ? "deck" : "decks"}` : "Not used yet"}</span>
-                <span aria-hidden="true">·</span>
-                <time dateTime={item.updatedAt}>{dateFormatter.format(new Date(item.updatedAt))}</time>
-              </p>
-
-              <div className="lib-block-actions">
-                <button type="button" onClick={() => { setEditingId(item.id); setDraftName(item.name); }}>Rename</button>
-                <button type="button" className="is-danger" onClick={async () => {
-                  const warning = item.usageCount > 0
-                    ? `\n\nUsed in ${item.usageCount} ${item.usageCount === 1 ? "deck" : "decks"}. Those slides keep their copy but detach from the library.`
-                    : "";
-                  if (!window.confirm(`Delete “${item.name}”?${warning}`)) return;
-                  const result = await deleteLibraryItemsAction([item.id]);
-                  setNotice(result.status === "error" ? result.message : result.message ?? "");
-                }}>Delete</button>
-              </div>
-            </>
-          )}
+          <p className="lib-block-meta">
+            <span>v{item.version}</span>
+            <span aria-hidden="true">·</span>
+            <span>{item.usageCount > 0
+              ? `${item.usageCount} ${item.usageCount === 1 ? "deck" : "decks"}`
+              : "Unused"}</span>
+            <span aria-hidden="true">·</span>
+            <time dateTime={item.updatedAt}>{dateFormatter.format(new Date(item.updatedAt))}</time>
+          </p>
         </div>
       </article>
     );
   }
 
-  function renderRow(item: LibraryBlockItem, index: number, selection: Selection) {
-    const checkboxId = `select-row-${item.id}`;
-    return (
-      <tr key={item.id} data-status={item.status} data-selected={selection.isSelected(item.id) || undefined}>
-        <td>
-          <input
-            id={checkboxId} type="checkbox"
-            checked={selection.isSelected(item.id)}
-            onChange={(event) => selection.toggle(item.id, index, (event.nativeEvent as MouseEvent).shiftKey)}
-          />
-          <label htmlFor={checkboxId} className="sr-only">Select {item.name}</label>
-        </td>
-        <th scope="row">
-          <strong>{item.name}</strong>
-          <span>{nodeSummary(item.node)}</span>
-        </th>
-        <td><StatusPill status={item.status} /></td>
-        <td>{item.category?.name ?? <span className="lib-muted">Uncategorized</span>}</td>
-        <td>{typeLabel(item.node)}</td>
-        <td className="lib-numeric">{item.usageCount || <span className="lib-muted">—</span>}</td>
-        <td><time dateTime={item.updatedAt}>{dateFormatter.format(new Date(item.updatedAt))}</time></td>
-      </tr>
-    );
-  }
+  const columns: ColumnDef<LibraryBlockItem>[] = [
+    {
+      id: "name", label: "Name", required: true, isRowHeader: true, width: 320, minWidth: 180,
+      compare: (a, b) => a.name.localeCompare(b.name),
+      render: (item) => (
+        <>
+          <Link className="lib-table-name" href={`/library/blocks/${item.id}`}>{item.name}</Link>
+          <span className="lib-table-gist">{nodeSummary(item.node)}</span>
+        </>
+      ),
+    },
+    {
+      id: "status", label: "Status", width: 130,
+      compare: (a, b) => a.status.localeCompare(b.status),
+      render: (item) => <StatusPill status={item.status} />,
+    },
+    {
+      id: "category", label: "Category", width: 150,
+      compare: (a, b) => (a.category?.name ?? "").localeCompare(b.category?.name ?? ""),
+      render: (item) => item.category?.name ?? <span className="lib-muted">Uncategorized</span>,
+    },
+    {
+      id: "tags", label: "Tags", width: 200, defaultHidden: true,
+      render: (item) => item.tags.length
+        ? item.tags.map((tag) => tag.name).join(", ")
+        : <span className="lib-muted">—</span>,
+    },
+    {
+      id: "usage", label: "Decks", width: 90, align: "end",
+      compare: (a, b) => a.usageCount - b.usageCount,
+      render: (item) => item.usageCount || <span className="lib-muted">—</span>,
+    },
+    {
+      id: "version", label: "Version", width: 90, align: "end", defaultHidden: true,
+      compare: (a, b) => a.version - b.version,
+      render: (item) => item.version,
+    },
+    {
+      id: "author", label: "Created by", width: 160, defaultHidden: true,
+      compare: (a, b) => (a.author?.name ?? "").localeCompare(b.author?.name ?? ""),
+      render: (item) => item.author?.name ?? <span className="lib-muted">Unknown</span>,
+    },
+    {
+      id: "updated", label: "Updated", width: 140,
+      compare: (a, b) => a.updatedAt.localeCompare(b.updatedAt),
+      render: (item) => <time dateTime={item.updatedAt}>{dateFormatter.format(new Date(item.updatedAt))}</time>,
+    },
+  ];
 
   return (
-    <>
-      {notice && <p className="library-status" role="status">{notice}</p>}
       <LibraryShell<LibraryBlockItem>
+        breadcrumbs={[{ label: "Decks", href: "/decks" }, { label: "Content blocks" }]}
+        notice={notice}
         title="Content blocks"
-        description="Reusable groups of content. Approved blocks are what sales sees by default; drafts stay visibly provisional until someone signs off."
+        description="Reusable groups of content. Approved blocks are always visible; drafts stay hidden until you ask for them."
         items={items}
         storageKey="blocks"
         searchText={(item) => [
-          item.name, item.description ?? "", item.node.type, nodeSummary(item.node),
+          item.name, item.description ?? "", nodeSummary(item.node),
           item.category?.name ?? "", item.tags.map((t) => t.name).join(" "),
+          item.author?.name ?? "",
         ].join(" ")}
         views={["grid", "list"]}
         filters={filters}
+        draftToggle={{
+          label: "Show drafts",
+          isDraft: (item) => item.status !== "approved",
+          draftCount: items.filter((item) => item.status !== "approved").length,
+        }}
         sorts={sorts}
+        sortHiddenForViews={["list"]}
         bulkActions={bulkActions}
         addActions={[
-          { id: "from-deck", label: "Save from a deck", hint: "Use the ★ on any block while editing", href: "/decks" },
+          { id: "from-deck", label: "Save from a deck", hint: "Use the bookmark on any block while editing", href: "/decks" },
+          { id: "new-here", label: "Create a block here", hint: "Coming in v2 — compose without opening a deck", comingSoon: true },
         ]}
         emptyState={{
           heading: "Build the library from a deck",
-          body: "Open a deck and use the star button on any block to save a reusable snapshot. It will show up here with its category, tags, and approval state.",
+          body: "Open a deck and use the bookmark button on any block to save a reusable snapshot. It will show up here with its category, tags, and approval state.",
         }}
         noResultsState={{
           heading: "No blocks match those filters",
-          body: "Try a different search or clear the filters. If you are hunting for something unapproved, check that Draft is included in the status filter.",
+          body: "Try a different search or clear the filters. If you are hunting for something unapproved, switch on “Show drafts”.",
         }}
         renderView={(mode, visible, selection) =>
           mode === "grid" ? (
@@ -333,25 +309,17 @@ export default function BlockLibrary({
               {visible.map((item, index) => renderCard(item, index, selection))}
             </div>
           ) : (
-            <table className="lib-table">
-              <caption className="sr-only">Content blocks, {visible.length} shown</caption>
-              <thead>
-                <tr>
-                  <th scope="col"><span className="sr-only">Select</span></th>
-                  <th scope="col">Name</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Category</th>
-                  <th scope="col">Type</th>
-                  <th scope="col">Decks</th>
-                  <th scope="col">Updated</th>
-                </tr>
-              </thead>
-              <tbody>{visible.map((item, index) => renderRow(item, index, selection))}</tbody>
-            </table>
+            <DataTable<LibraryBlockItem>
+              items={visible}
+              columns={columns}
+              selection={selection}
+              storageKey="blocks"
+              rowLabel={(item) => item.name}
+              caption={`Content blocks, ${visible.length} shown`}
+            />
           )
         }
       />
-    </>
   );
 }
 
@@ -373,7 +341,8 @@ function TagRow({ category, tags }: { category: Tag | null; tags: Tag[] }) {
   return (
     <p className="lib-block-tags">
       {category && <span className="lib-tag is-category">{category.name}</span>}
-      {tags.map((tag) => <span key={tag.id} className="lib-tag">{tag.name}</span>)}
+      {tags.slice(0, 3).map((tag) => <span key={tag.id} className="lib-tag">{tag.name}</span>)}
+      {tags.length > 3 && <span className="lib-tag is-more">+{tags.length - 3}</span>}
     </p>
   );
 }

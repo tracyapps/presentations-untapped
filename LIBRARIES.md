@@ -606,17 +606,54 @@ same files.
 
 ---
 
-## 10. Open questions
+## 10. Decisions and open questions
 
-1. **Variable syntax** — confirm `{{company.name}}` over `{client-name}` before
-   any content is authored with it. (§7.1)
-2. **"Detach into blocks"** — confirm wording, or pick another and it gets used
-   everywhere. (§5.4)
-3. **Company vs Client** — confirming the table stays `clients` and the UI says
-   "Company" throughout. (§2.5)
-4. **Sales default filter** — should sales-facing block pickers default to
-   approved-only with an opt-in for drafts? Recommended, but it is a workflow
-   call. (§4.2)
-5. **Favorites** — per-user (each person stars their own) or shared team
-   favorites? Per-user is assumed above and is the smaller build; shared is
-   arguably more useful for a team this size.
+**Settled**
+
+1. **Variable syntax** — `{{company.name}}`. Double braces, dot paths. (§7.1)
+2. **Company vs Client** — table stays `clients`, UI says "Company"
+   everywhere, variable namespace is `company.*`. (§2.5)
+3. **Drafts, not a status filter** — status is a switch in the toolbar, not a
+   multi-select. Approved content is always visible and the switch only ever
+   *adds* drafts, so nobody can filter into a draft-only list and ship from it.
+4. **Favorites are per-user.** The star means "mine". (§4.2)
+5. **Icons** — a **bookmark** saves a block to the library; a **star** is a
+   personal favorite. One glyph cannot mean two things.
+6. **Editing one item is its own route**, not an inline card editor or a modal.
+   `/library/blocks/[id]` is linkable, which is exactly what approval needs
+   ("Jim, approve this: <url>"), and it gives discussion and approval the room
+   they will need. Delete lives there, in its own bordered region, rather than
+   on a card being scanned quickly.
+7. **Block type is not a filter.** It cannot describe a nested group, and what
+   people hunt for is the content, not the shape.
+
+**Still open**
+
+8. **"Detach into blocks"** — confirm the wording, or pick another and it gets
+   used everywhere. (§5.4)
+9. **Category vocabulary** — the taxonomy is free-text today, which is how
+   libraries get eleven near-identical categories. Worth agreeing a starting set
+   (Intro, Case study, Stats, Team, Pricing, Close…) and seeding it.
+
+---
+
+## 11. Preview rules
+
+The two reusable libraries are told apart by how their items preview, and this
+is deliberate rather than incidental:
+
+- **Content blocks preview bare.** `BlockPreview` renders the real block tree
+  through the shared renderer with no slide viewport, no 16:9 frame, no surface
+  or pattern. You are choosing a content group — a stat card, an intro
+  paragraph, an image-and-text pair — so it shows as itself.
+- **Whole slides preview as slides**, in frame, with their styling. That is
+  `SlidePreview`, landing with the slide library.
+
+Scaling is a CSS transform over a full-width render, not shrunken font sizes, so
+the type hierarchy inside a block survives. Previews are `aria-hidden` — the
+name, status, and tags beside them are the accessible content, and a scaled
+visual duplicate would just be noise in a screen reader.
+
+Version and variation switching on a preview is designed (a dropdown above the
+preview selecting parent/variant) but **hidden until the variant schema is
+live** — a control nobody can ever use is noise.

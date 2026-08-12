@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import AppHeader from "@/components/AppHeader";
 import BlockLibrary from "@/components/library/BlockLibrary";
@@ -30,10 +29,6 @@ export default async function LibraryPage() {
   return (
     <main className="app-shell">
       <AppHeader />
-      <nav className="lib-nav" aria-label="Libraries">
-        <Link href="/library" aria-current="page">Content blocks</Link>
-        <Link href="/decks">Back to decks</Link>
-      </nav>
       <BlockLibrary items={items} categories={categories} tagOptions={tagOptions} />
     </main>
   );
