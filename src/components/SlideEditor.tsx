@@ -15,6 +15,7 @@ import VoiceoverEditor from "@/components/VoiceoverEditor";
 import type { EditorDeck, EditorSlide } from "@/lib/data/editor";
 import type { LibraryBlockItem } from "@/lib/data/library";
 import type { MediaAsset, MediaLibraryData } from "@/lib/data/media";
+import { replaceMediaUrl } from "@/lib/media-references";
 import { hasMediaDrag, readMediaDrag } from "@/lib/media-dnd";
 import { LAYOUTS, migrateToLayout } from "@/lib/slides/layouts";
 import { appendContent, appendLayout, cloneNode, createContentNode, deleteNode, duplicateNode, moveNode, moveNodeTo, swapLayoutChildren } from "@/lib/slides/editor";
@@ -27,12 +28,34 @@ type SaveState = "saved" | "dirty" | "saving" | "conflict" | "error";
 type PaletteSection = "layouts" | "design" | "content" | "library" | "media";
 type SlideNavView = "large" | "compact" | "pages";
 type AddLayoutView = "large" | "compact";
+type EditorPanelLayout = {
+  resourceWidth: number;
+  inspectorWidth: number;
+  slideRowHeight: number;
+  resourceVisible: boolean;
+  inspectorVisible: boolean;
+  slidesVisible: boolean;
+};
 type TextNode = Extract<ContentNode, { type: "title" | "tagline" | "blockquote" | "callout" | "paragraph" }>;
 
 const PALETTE_STATE_KEY = "lu-editor-palette-sections-v1";
 const SLIDE_NAV_VIEW_KEY = "lu-editor-slide-nav-view-v1";
 const ADD_LAYOUT_VIEW_KEY = "lu-editor-add-layout-view-v1";
 const ADD_LAYOUT_KEY = "lu-editor-last-add-layout-v1";
+const PANEL_LAYOUT_KEY = "lu-editor-panel-layout-v1";
+const DEFAULT_PANEL_LAYOUT: EditorPanelLayout = {
+  resourceWidth: 260,
+  inspectorWidth: 230,
+  slideRowHeight: 188,
+  resourceVisible: true,
+  inspectorVisible: true,
+  slidesVisible: true,
+};
+const PANEL_LIMITS = {
+  resourceWidth: [190, 420],
+  inspectorWidth: [190, 380],
+  slideRowHeight: [116, 280],
+} as const;
 const DEFAULT_PALETTE_STATE: Record<PaletteSection, boolean> = {
   layouts: true,
   design: true,
@@ -73,6 +96,10 @@ function plainText(value: RichText): string {
   return value.map((part) => part.text).join("");
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLibrary }: { deck: EditorDeck; initialSlide: EditorSlide; libraryItems: LibraryBlockItem[]; mediaLibrary: MediaLibraryData }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("design");
@@ -87,6 +114,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   const [addLayoutKey, setAddLayoutKey] = useState(initialSlide.layoutKey);
   const [slideNavView, setSlideNavView] = useState<SlideNavView>("large");
   const [addLayoutView, setAddLayoutView] = useState<AddLayoutView>("large");
+  const [panelLayout, setPanelLayout] = useState<EditorPanelLayout>(DEFAULT_PANEL_LAYOUT);
   const [savedLayoutKey, setSavedLayoutKey] = useState(initialSlide.layoutKey);
   const [updatedAt, setUpdatedAt] = useState(initialSlide.updatedAt);
   const [saveState, setSaveState] = useState<SaveState>("saved");
@@ -137,6 +165,19 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     if (addView === "large" || addView === "compact") setAddLayoutView(addView);
     const lastLayout = localStorage.getItem(ADD_LAYOUT_KEY);
     if (lastLayout && LAYOUTS.some((layout) => layout.key === lastLayout)) setAddLayoutKey(lastLayout);
+    try {
+      const savedPanels = JSON.parse(localStorage.getItem(PANEL_LAYOUT_KEY) ?? "null") as Partial<EditorPanelLayout> | null;
+      if (savedPanels) setPanelLayout({
+        resourceWidth: clamp(Number(savedPanels.resourceWidth) || DEFAULT_PANEL_LAYOUT.resourceWidth, ...PANEL_LIMITS.resourceWidth),
+        inspectorWidth: clamp(Number(savedPanels.inspectorWidth) || DEFAULT_PANEL_LAYOUT.inspectorWidth, ...PANEL_LIMITS.inspectorWidth),
+        slideRowHeight: clamp(Number(savedPanels.slideRowHeight) || DEFAULT_PANEL_LAYOUT.slideRowHeight, ...PANEL_LIMITS.slideRowHeight),
+        resourceVisible: savedPanels.resourceVisible ?? true,
+        inspectorVisible: savedPanels.inspectorVisible ?? true,
+        slidesVisible: savedPanels.slidesVisible ?? true,
+      });
+    } catch {
+      localStorage.removeItem(PANEL_LAYOUT_KEY);
+    }
   }, []);
 
   const visibleLibraryItems = useMemo(() => {
@@ -151,6 +192,14 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     setPaletteState((current) => {
       const next = { ...current, [section]: !current[section] };
       localStorage.setItem(PALETTE_STATE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function updatePanelLayout(update: Partial<EditorPanelLayout>) {
+    setPanelLayout((current) => {
+      const next = { ...current, ...update };
+      localStorage.setItem(PANEL_LAYOUT_KEY, JSON.stringify(next));
       return next;
     });
   }
@@ -342,18 +391,53 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   }
 
   async function deleteMediaAsset(asset: MediaAsset) {
-    if (!window.confirm(`Delete “${asset.name}” from the media library? Existing slides using it will stop displaying the image. This cannot be undone.`)) {
-      return false;
+    if (!window.confirm(`Delete “${asset.name}” from the media library? This cannot be undone.`)) return false;
+    async function requestDelete(force = false) {
+      const response = await fetch("/api/media", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pathname: asset.pathname, force }),
+      });
+      const result = await response.json() as { error?: string; requiresForce?: boolean; referenceCount?: number; slideCount?: number; slidePositions?: number[] };
+      return { response, result };
     }
-    const response = await fetch("/api/media", {
-      method: "DELETE",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pathname: asset.pathname }),
-    });
-    const result = await response.json() as { error?: string };
-    if (!response.ok) throw new Error(result.error ?? "The image could not be deleted.");
+    let deletion = await requestDelete();
+    if (deletion.response.status === 409 && deletion.result.requiresForce) {
+      const positions = deletion.result.slidePositions?.join(", ");
+      const confirmed = window.confirm(`“${asset.name}” is used ${deletion.result.referenceCount} time${deletion.result.referenceCount === 1 ? "" : "s"} across ${deletion.result.slideCount} slide${deletion.result.slideCount === 1 ? "" : "s"}${positions ? ` (${positions})` : ""}. Delete it anyway? Those images will stop displaying.`);
+      if (!confirmed) return false;
+      deletion = await requestDelete(true);
+    }
+    if (!deletion.response.ok) throw new Error(deletion.result.error ?? "The image could not be deleted.");
     setMediaItems((current) => current.filter((item) => item.url !== asset.url));
     return true;
+  }
+
+  async function renameMediaAsset(asset: MediaAsset, name: string): Promise<{ asset: MediaAsset; message: string }> {
+    const response = await fetch("/api/media", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pathname: asset.pathname, name }),
+    });
+    const result = await response.json() as {
+      asset?: MediaAsset;
+      error?: string;
+      warning?: string;
+      referencesUpdated?: number;
+      slideVersions?: Array<{ id: string; updatedAt: string }>;
+    };
+    if (!response.ok || !result.asset) throw new Error(result.error ?? "The image could not be renamed.");
+    const renamed = result.asset;
+    setMediaItems((current) => current.map((item) => item.url === asset.url ? renamed : item));
+    setMediaInitialAsset((current) => current?.url === asset.url ? renamed : current);
+    setDoc((current) => replaceMediaUrl(current, asset.url, renamed.url));
+    setSavedDoc((current) => replaceMediaUrl(current, asset.url, renamed.url));
+    const currentVersion = result.slideVersions?.find((slide) => slide.id === initialSlide.id);
+    if (currentVersion) setUpdatedAt(currentVersion.updatedAt);
+    const referenceNote = result.referencesUpdated
+      ? ` Updated ${result.referencesUpdated} slide reference${result.referencesUpdated === 1 ? "" : "s"}.`
+      : "";
+    return { asset: renamed, message: `Renamed to “${renamed.name}”.${referenceNote}${result.warning ? ` ${result.warning}` : ""}` };
   }
 
   function applyImageProps(id: string, props: ContentProps["image"]) {
@@ -486,6 +570,11 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
           ))}
         </nav>
         <div className="editor-actions">
+          <div className="editor-panel-toggles" role="group" aria-label="Workspace panels">
+            <button type="button" aria-label="Toggle add slide panel" title="Add slide and libraries" aria-pressed={panelLayout.resourceVisible} onClick={() => updatePanelLayout({ resourceVisible: !panelLayout.resourceVisible })}>▧</button>
+            <button type="button" aria-label="Toggle slide controls panel" title="Content and slide design" aria-pressed={panelLayout.inspectorVisible} onClick={() => updatePanelLayout({ inspectorVisible: !panelLayout.inspectorVisible })}>◫</button>
+            <button type="button" aria-label="Toggle slides row" title="Slide navigator" aria-pressed={panelLayout.slidesVisible} onClick={() => updatePanelLayout({ slidesVisible: !panelLayout.slidesVisible })}>▤</button>
+          </div>
           <span className={`save-state save-state-${visibleSaveState}`} aria-live="polite">{stateLabel[visibleSaveState]}</span>
           <Link className="button button-secondary" href={`/decks/${deck.id}/present`} onClick={confirmNavigate}>Present</Link>
           <Link className="button button-secondary" href="/decks" onClick={confirmNavigate}>Close</Link>
@@ -496,11 +585,18 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
       {message && <div className={`editor-message editor-message-${saveState}`} role="alert">{message}{saveState === "conflict" && <button type="button" onClick={() => window.location.reload()}>Refresh slide</button>}</div>}
       {libraryNotice && !libraryTarget && <div className="editor-message editor-message-success" role="status">{libraryNotice}</div>}
 
-      <div className="editor-body">
-        <aside className="resource-palette" aria-label="Add slides and reusable assets">
+      <div
+        className="editor-body"
+        style={{
+          "--editor-resource-width": `${panelLayout.resourceVisible ? panelLayout.resourceWidth : 0}px`,
+          "--editor-inspector-width": `${panelLayout.inspectorVisible ? panelLayout.inspectorWidth : 0}px`,
+          "--editor-slide-row-height": `${panelLayout.slidesVisible ? panelLayout.slideRowHeight : 0}px`,
+        } as React.CSSProperties}
+      >
+        {panelLayout.resourceVisible && <aside className="resource-palette" aria-label="Add slides and reusable assets">
           <div className="resource-palette-topbar">
             <div><strong>Add slide</strong><span>{LAYOUTS.find((layout) => layout.key === addLayoutKey)?.name}</span></div>
-            <button type="button" onClick={() => addSlide()} disabled={isAdding} aria-label={`Add ${LAYOUTS.find((layout) => layout.key === addLayoutKey)?.name ?? "slide"}`}>{isAdding ? "…" : "+"}</button>
+            <div className="resource-palette-topbar-actions"><button type="button" className="panel-hide-button" onClick={() => updatePanelLayout({ resourceVisible: false })} aria-label="Hide add slide panel" title="Hide panel">‹</button><button type="button" className="panel-add-button" onClick={() => addSlide()} disabled={isAdding} aria-label={`Add ${LAYOUTS.find((layout) => layout.key === addLayoutKey)?.name ?? "slide"}`}>{isAdding ? "…" : "+"}</button></div>
           </div>
           <PaletteSectionPanel id="layouts" label="Choose a layout" open={paletteState.layouts} onToggle={() => togglePaletteSection("layouts")}>
             <p className="palette-help">Choose a layout to create a new slide with it.</p>
@@ -527,9 +623,11 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             <div className="library-palette-heading"><p className="palette-help">Click to preview and choose how to use an image.</p><button type="button" className="palette-text-action" onClick={() => openMediaLibrary()}>Open library</button></div>
             <MediaLibraryPanel items={mediaItems} configured={mediaLibrary.configured} loadError={mediaLibrary.error} onUploaded={registerMedia} onSelect={openMediaLibrary} />
           </PaletteSectionPanel>
-        </aside>
+        </aside>}
+        {panelLayout.resourceVisible && <ResizeHandle orientation="vertical" className="resource-resize-handle" label="Resize add slide panel" value={panelLayout.resourceWidth} min={PANEL_LIMITS.resourceWidth[0]} max={PANEL_LIMITS.resourceWidth[1]} resetValue={DEFAULT_PANEL_LAYOUT.resourceWidth} onChange={(resourceWidth) => updatePanelLayout({ resourceWidth })} />}
 
-        <aside className="block-palette" aria-label="Slide controls">
+        {panelLayout.inspectorVisible && <aside className="block-palette" aria-label="Slide controls">
+          <div className="panel-rail-header"><strong>Slide controls</strong><button type="button" onClick={() => updatePanelLayout({ inspectorVisible: false })} aria-label="Hide slide controls panel" title="Hide panel">‹</button></div>
           {tab === "voiceover" ? (
             <div className="palette-note"><strong>Voiceover tools</strong><p>Each slide can have one reusable player and a manually timed caption track.</p></div>
           ) : (
@@ -578,9 +676,11 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
               </PaletteSectionPanel>}
             </>
           )}
-        </aside>
+        </aside>}
+        {panelLayout.inspectorVisible && <ResizeHandle orientation="vertical" className="inspector-resize-handle" label="Resize slide controls panel" value={panelLayout.inspectorWidth} min={PANEL_LIMITS.inspectorWidth[0]} max={PANEL_LIMITS.inspectorWidth[1]} resetValue={DEFAULT_PANEL_LAYOUT.inspectorWidth} onChange={(inspectorWidth) => updatePanelLayout({ inspectorWidth })} />}
 
-        <SlideNavigator deckId={deck.id} slides={navigationSlides} currentSlideId={initialSlide.id} theme={previewTheme} view={slideNavView} onViewChange={(value) => { setSlideNavView(value); localStorage.setItem(SLIDE_NAV_VIEW_KEY, value); }} onNavigate={confirmNavigate} onDuplicate={duplicateCurrentSlide} onDelete={deleteCurrentSlide} deletingDisabled={isAdding || deck.slides.length === 1} />
+        {panelLayout.slidesVisible && <SlideNavigator deckId={deck.id} slides={navigationSlides} currentSlideId={initialSlide.id} theme={previewTheme} view={slideNavView} onViewChange={(value) => { setSlideNavView(value); localStorage.setItem(SLIDE_NAV_VIEW_KEY, value); }} onNavigate={confirmNavigate} onDuplicate={duplicateCurrentSlide} onDelete={deleteCurrentSlide} onHide={() => updatePanelLayout({ slidesVisible: false })} deletingDisabled={isAdding || deck.slides.length === 1} />}
+        {panelLayout.slidesVisible && <ResizeHandle orientation="horizontal" className="slides-resize-handle" label="Resize slides row" value={panelLayout.slideRowHeight} min={PANEL_LIMITS.slideRowHeight[0]} max={PANEL_LIMITS.slideRowHeight[1]} resetValue={DEFAULT_PANEL_LAYOUT.slideRowHeight} onChange={(slideRowHeight) => updatePanelLayout({ slideRowHeight })} />}
 
         <section className="editor-workspace">
           <div className="editor-context">
@@ -640,6 +740,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
         onClose={closeMediaModal}
         onUploaded={registerMedia}
         onDelete={deleteMediaAsset}
+        onRename={renameMediaAsset}
         onApply={applyImageProps}
         onAddFloating={addFloatingImageFromMedia}
         onUseAsBackground={useMediaAsBackground}
@@ -662,7 +763,64 @@ function PanelViewToggle<T extends string>({ label, value, options, onChange }: 
   </div>;
 }
 
-function SlideNavigator({ deckId, slides, currentSlideId, theme, view, onViewChange, onNavigate, onDuplicate, onDelete, deletingDisabled }: {
+function ResizeHandle({ orientation, className, label, value, min, max, resetValue, onChange }: {
+  orientation: "vertical" | "horizontal";
+  className: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  resetValue: number;
+  onChange: (value: number) => void;
+}) {
+  function startResize(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const startPosition = orientation === "vertical" ? event.clientX : event.clientY;
+    const startValue = value;
+    document.body.classList.add("is-resizing-editor");
+    function move(pointerEvent: PointerEvent) {
+      const position = orientation === "vertical" ? pointerEvent.clientX : pointerEvent.clientY;
+      onChange(clamp(startValue + position - startPosition, min, max));
+    }
+    function finish() {
+      document.body.classList.remove("is-resizing-editor");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish, { once: true });
+    window.addEventListener("pointercancel", finish, { once: true });
+  }
+
+  function nudge(event: React.KeyboardEvent<HTMLDivElement>) {
+    const lower = orientation === "vertical" ? "ArrowLeft" : "ArrowUp";
+    const higher = orientation === "vertical" ? "ArrowRight" : "ArrowDown";
+    if (event.key !== lower && event.key !== higher && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    if (event.key === "Home") onChange(min);
+    else if (event.key === "End") onChange(max);
+    else onChange(clamp(value + (event.key === higher ? 10 : -10), min, max));
+  }
+
+  return <div
+    className={`editor-resize-handle ${className}`}
+    role="separator"
+    tabIndex={0}
+    aria-label={label}
+    aria-orientation={orientation}
+    aria-valuemin={min}
+    aria-valuemax={max}
+    aria-valuenow={value}
+    onPointerDown={startResize}
+    onKeyDown={nudge}
+    onDoubleClick={() => onChange(resetValue)}
+    title="Drag to resize · Double-click to reset"
+  ><span aria-hidden="true" /></div>;
+}
+
+function SlideNavigator({ deckId, slides, currentSlideId, theme, view, onViewChange, onNavigate, onDuplicate, onDelete, onHide, deletingDisabled }: {
   deckId: string;
   slides: EditorSlide[];
   currentSlideId: string;
@@ -672,10 +830,11 @@ function SlideNavigator({ deckId, slides, currentSlideId, theme, view, onViewCha
   onNavigate: (event: React.MouseEvent) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onHide: () => void;
   deletingDisabled: boolean;
 }) {
   return <section className={`slide-navigator is-${view}`} aria-label="Slides">
-    <div className="slide-navigator-heading"><strong>Slides</strong><span>{slides.length}</span></div>
+    <div className="slide-navigator-heading"><strong>Slides</strong><span>{slides.length}</span><button type="button" onClick={onHide} aria-label="Hide slides row" title="Hide slides row">⌃</button></div>
     <ol className="slide-navigator-list">
       {slides.map((slide) => {
         const layout = LAYOUTS.find((item) => item.key === slide.layoutKey);

@@ -19,6 +19,7 @@ type MediaLibraryModalProps = {
   onClose: () => void;
   onUploaded: (asset: MediaAsset) => void;
   onDelete: (asset: MediaAsset) => Promise<boolean>;
+  onRename: (asset: MediaAsset, name: string) => Promise<{ asset: MediaAsset; message: string }>;
   onApply: (id: string, props: ContentProps["image"]) => void;
   onAddFloating: (asset: MediaAsset) => void;
   onUseAsBackground: (asset: MediaAsset) => void;
@@ -28,8 +29,11 @@ function defaultAlt(asset: MediaAsset): string {
   return asset.name.replace(/\.[^.]+$/, "").replaceAll("-", " ");
 }
 
-export default function MediaLibraryModal({ open, image, initialAsset, items, configured, loadError, onClose, onUploaded, onDelete, onApply, onAddFloating, onUseAsBackground }: MediaLibraryModalProps) {
+export default function MediaLibraryModal({ open, image, initialAsset, items, configured, loadError, onClose, onUploaded, onDelete, onRename, onApply, onAddFloating, onUseAsBackground }: MediaLibraryModalProps) {
   const [draft, setDraft] = useState<ContentProps["image"]>({ src: "", alt: "" });
+  const [renameValue, setRenameValue] = useState("");
+  const [renameMessage, setRenameMessage] = useState("");
+  const [isRenaming, setIsRenaming] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -57,6 +61,11 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
   }, [open, onClose]);
 
   const selectedAsset = useMemo(() => items.find((item) => item.url === draft.src), [draft.src, items]);
+  const selectedExtension = selectedAsset?.name.match(/(\.[a-z0-9]{2,5})$/i)?.[1] ?? "";
+  useEffect(() => {
+    setRenameValue(selectedAsset?.name.replace(/\.[a-z0-9]{2,5}$/i, "") ?? "");
+    setRenameMessage("");
+  }, [selectedAsset?.url]);
   if (!open) return null;
 
   const frame = frameByKey(draft.frame);
@@ -64,6 +73,22 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
 
   function selectAsset(asset: MediaAsset) {
     setDraft((current) => ({ ...current, src: asset.url, alt: current.alt || defaultAlt(asset) }));
+  }
+
+  async function renameAsset(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedAsset || !renameValue.trim() || isRenaming) return;
+    setIsRenaming(true);
+    setRenameMessage("");
+    try {
+      const result = await onRename(selectedAsset, renameValue);
+      setDraft((current) => ({ ...current, src: result.asset.url }));
+      setRenameMessage(result.message);
+    } catch (error) {
+      setRenameMessage(error instanceof Error ? error.message : "The image could not be renamed.");
+    } finally {
+      setIsRenaming(false);
+    }
   }
 
   async function deleteAsset(asset: MediaAsset) {
@@ -101,7 +126,14 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
                 {draft.caption && <p>{draft.caption}</p>}
               </> : <span>No image selected</span>}
             </div>
-            {selectedAsset && <div className="media-modal-file-meta"><strong>{selectedAsset.name}</strong><span>{Math.max(1, Math.round(selectedAsset.size / 1024))} KB</span></div>}
+            {selectedAsset && <>
+              <div className="media-modal-file-meta"><strong>{selectedAsset.name}</strong><span>{Math.max(1, Math.round(selectedAsset.size / 1024))} KB</span></div>
+              <form className="media-rename-form" onSubmit={renameAsset}>
+                <label><span>Media name</span><span className="media-name-field"><input type="text" maxLength={90} required value={renameValue} onChange={(event) => setRenameValue(event.target.value)} /><i>{selectedExtension}</i></span></label>
+                <button className="button button-secondary" type="submit" disabled={isRenaming || !renameValue.trim()}>{isRenaming ? "Renaming…" : "Rename"}</button>
+              </form>
+              {renameMessage && <p className={`media-rename-message${renameMessage.startsWith("Renamed") ? " is-success" : ""}`} role="status">{renameMessage}</p>}
+            </>}
             {image && <>
               <label>Image URL<input type="url" value={draft.src} onChange={(event) => setDraft((current) => ({ ...current, src: event.target.value }))} placeholder="https://…" /></label>
               <label>Alt text<input type="text" value={draft.alt} disabled={draft.decorative} onChange={(event) => setDraft((current) => ({ ...current, alt: event.target.value }))} /></label>

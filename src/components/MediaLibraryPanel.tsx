@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { MediaAsset } from "@/lib/data/media";
 import { MEDIA_DRAG_TYPE, readMediaDrag } from "@/lib/media-dnd";
 import policy from "@/lib/media-policy.json";
@@ -36,42 +36,55 @@ export default function MediaLibraryPanel({ items, configured, loadError, select
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState("");
   const [deletingUrl, setDeletingUrl] = useState("");
+  const [query, setQuery] = useState("");
+  const visibleItems = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return normalized ? items.filter((item) => item.name.toLowerCase().includes(normalized)) : items;
+  }, [items, query]);
 
-  async function uploadFile(file: File) {
+  async function uploadFiles(files: File[]) {
     setMessage("");
-    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
-      setMessage("Choose a JPG, PNG, WebP, or GIF image.");
-      return;
-    }
-    if (file.size > policy.maximumSizeInBytes) {
-      setMessage("Images must be 15 MB or smaller.");
-      return;
-    }
+    const validFiles = files.filter((file) => ALLOWED_IMAGE_TYPES.has(file.type) && file.size <= policy.maximumSizeInBytes);
+    const skipped = files.length - validFiles.length;
+    if (!validFiles.length) return setMessage("Choose JPG, PNG, WebP, or GIF images that are 15 MB or smaller.");
 
     setUploading(true);
     setProgress(0);
+    const uploaded: MediaAsset[] = [];
+    let failed = 0;
     try {
       const { upload } = await import("@vercel/blob/client");
-      const blob = await upload(`${policy.prefix}${crypto.randomUUID()}--${safeFilename(file.name)}`, file, {
-        access: "public",
-        handleUploadUrl: "/api/media/upload",
-        contentType: file.type,
-        onUploadProgress: ({ percentage }) => setProgress(Math.round(percentage)),
-      });
-      const asset: MediaAsset = {
-        url: blob.url,
-        pathname: blob.pathname,
-        name: file.name,
-        size: file.size,
-        uploadedAt: new Date().toISOString(),
-        contentType: blob.contentType,
-      };
-      onUploaded(asset);
-      onSelect(asset);
-      setMessage(`Uploaded ${file.name}.`);
+      for (let index = 0; index < validFiles.length; index += 1) {
+        const file = validFiles[index];
+        try {
+          const blob = await upload(`${policy.prefix}${crypto.randomUUID()}--${safeFilename(file.name)}`, file, {
+            access: "public",
+            handleUploadUrl: "/api/media/upload",
+            contentType: file.type,
+            onUploadProgress: ({ percentage }) => setProgress(Math.round(((index + (percentage / 100)) / validFiles.length) * 100)),
+          });
+          const asset: MediaAsset = {
+            url: blob.url,
+            pathname: blob.pathname,
+            name: file.name,
+            size: file.size,
+            uploadedAt: new Date().toISOString(),
+            contentType: blob.contentType,
+          };
+          uploaded.push(asset);
+          onUploaded(asset);
+        } catch (error) {
+          failed += 1;
+          console.error(`Media upload failed for ${file.name}`, error);
+        }
+      }
+      if (uploaded.length) onSelect(uploaded.at(-1)!);
+      const skippedNote = skipped ? ` Skipped ${skipped} unsupported or oversized file${skipped === 1 ? "" : "s"}.` : "";
+      const failedNote = failed ? ` ${failed} upload${failed === 1 ? "" : "s"} failed.` : "";
+      setMessage(uploaded.length ? `Uploaded ${uploaded.length} image${uploaded.length === 1 ? "" : "s"}.${skippedNote}${failedNote}` : `No images were uploaded.${skippedNote}${failedNote}`);
     } catch (error) {
-      console.error("Media upload failed", error);
-      setMessage("The image could not be uploaded. Check the Blob connection and try again.");
+      console.error("Media upload setup failed", error);
+      setMessage("Images could not be uploaded. Check the Blob connection and try again.");
     } finally {
       setUploading(false);
       setProgress(0);
@@ -80,8 +93,7 @@ export default function MediaLibraryPanel({ items, configured, loadError, select
   }
 
   function chooseFiles(files: FileList | null) {
-    const file = files?.[0];
-    if (file) void uploadFile(file);
+    if (files?.length) void uploadFiles(Array.from(files));
   }
 
   async function deleteAsset(asset: MediaAsset) {
@@ -99,7 +111,7 @@ export default function MediaLibraryPanel({ items, configured, loadError, select
   }
 
   return <div className={`media-library-panel media-library-panel-${variant}`}>
-    <input ref={inputRef} className="sr-only" type="file" accept={policy.allowedContentTypes.join(",")} disabled={!configured || uploading} onChange={(event) => chooseFiles(event.target.files)} />
+    <input ref={inputRef} className="sr-only" type="file" accept={policy.allowedContentTypes.join(",")} multiple disabled={!configured || uploading} onChange={(event) => chooseFiles(event.target.files)} />
     <button
       className={`media-dropzone${dragging ? " is-dragging" : ""}`}
       type="button"
@@ -124,13 +136,14 @@ export default function MediaLibraryPanel({ items, configured, loadError, select
         chooseFiles(event.dataTransfer.files);
       }}
     >
-      <strong>{uploading ? `Uploading… ${progress}%` : "Drop an image here"}</strong>
-      <span>{configured ? "or click to browse your drive · JPG, PNG, WebP, GIF · 15 MB max" : "Connect Vercel Blob to enable uploads"}</span>
+      <strong>{uploading ? `Uploading images… ${progress}%` : "Drop images here"}</strong>
+      <span>{configured ? "or click to browse your drive · select one or many · JPG, PNG, WebP, GIF · 15 MB each" : "Connect Vercel Blob to enable uploads"}</span>
       {uploading && <i aria-hidden="true"><b style={{ width: `${progress}%` }} /></i>}
     </button>
     {(message || loadError) && <p className={message.startsWith("Uploaded") ? "media-message is-success" : "media-message"} role="status">{message || loadError}</p>}
+    {variant === "modal" && <label className="media-search"><span>Search media</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by file name" /></label>}
     <div className="media-grid" aria-label="Media library">
-      {items.map((item) => <article
+      {visibleItems.map((item) => <article
         className={selectedUrl === item.url ? "is-selected" : ""}
         draggable
         onDragStart={(event) => {
@@ -152,6 +165,7 @@ export default function MediaLibraryPanel({ items, configured, loadError, select
         {onDelete && <button type="button" className="media-item-delete" aria-label={`Delete ${item.name} from media library`} disabled={!!deletingUrl} onClick={() => void deleteAsset(item)}>{deletingUrl === item.url ? "…" : "×"}</button>}
       </article>)}
       {configured && !items.length && !loadError && <p>No media uploaded yet.</p>}
+      {!!items.length && !visibleItems.length && <p>No media matches “{query}”.</p>}
     </div>
   </div>;
 }
