@@ -32,6 +32,33 @@ export type SlideBackgroundImage = {
 
 export type Node = LayoutNode | ContentNode;
 
+/* ---------------------------- Block layout ---------------------------- */
+
+/**
+ * Per-block layout settings, shared by every block type.
+ *
+ * Only images move freely on the slide; everything else stays in the flow,
+ * deliberately, because free-placed text is how decks stop looking like they
+ * came from the same company. These settings are the compensation — the knobs
+ * people actually reach for when they want a block to sit differently, without
+ * handing them a blank canvas.
+ *
+ * Named steps rather than pixel values so spacing stays on the type scale and
+ * a block cannot be nudged one pixel out of alignment with its neighbours.
+ */
+export type SpacingStep = "none" | "sm" | "md" | "lg" | "xl";
+export type BlockAlign = "start" | "center" | "end" | "stretch";
+
+export type BlockLayout = {
+  /** Space above and below, in scale steps. */
+  spaceBefore?: SpacingStep;
+  spaceAfter?: SpacingStep;
+  /** Horizontal placement of the block within the slide or its container. */
+  align?: BlockAlign;
+  /** Fraction of the available width, in tenths. Undefined = full width. */
+  width?: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+};
+
 /* -------------------------- Library link -------------------------- */
 
 /**
@@ -64,6 +91,7 @@ export type LayoutNode = {
     align?: "start" | "center" | "end" | "stretch";
   };
   style?: { surface?: SurfaceChoice };
+  layout?: BlockLayout;
   link?: NodeLink;
   children: Node[];
 };
@@ -131,6 +159,7 @@ export type ContentNode = {
     type: T;
     props: ContentProps[T];
     style?: { surface?: SurfaceChoice };
+    layout?: BlockLayout;
     link?: NodeLink;
   };
 }[ContentType];

@@ -183,6 +183,47 @@ a recorded set of editable fields, an add control per collection, a `!editor`
 bail-out so published decks emit no editing affordances, and a `label` on every
 inline editor. Adding a block type without an editing path now fails the suite.
 
+### Render parity, block settings, media adjust view (Aug 12, late)
+
+`npx tsc --noEmit` clean, **ten** test scripts passing (`test:parity` is new).
+
+**The present/edit divergence was a real bug, and worse than it looked.**
+Floating images are positioned with percentages. In edit mode every block is
+wrapped in a `position: relative` element, so an image nested inside a group
+resolved its percentages against *the group* in the editor and against the whole
+canvas in present mode. Four compounding causes on top of that: the edit canvas
+is `height: auto` (so blocks can overflow below the boundary) while present is
+`height: 100%`; `.editable-slide-block` added 24px of chrome padding above the
+image; `.dnd-node-slot.is-floating-slot .editable-block-content` hardcoded
+`aspect-ratio: 4/3`, overriding each image's real ratio; and rotation was applied
+at a different tree depth in each mode.
+
+Fixed structurally: `splitFloating()` lifts every float out of the flow tree at
+render time into one `.slide-float-layer` that is always exactly the 16:9 box,
+used by **both** modes. Geometry is applied to that layer's direct child and
+nowhere else. Drag and resize now measure the layer, not the growing canvas. The
+stored document is untouched — floats keep their place in the tree for Outline,
+drag/drop, and library snapshots.
+
+`npm run test:parity` locks this in: one layer rendered once outside the
+edit/present branch, no padding on it, no hardcoded aspect-ratio, no
+`doc.blocks.map` anywhere, drag measuring the layer, and no chrome padding on
+floating blocks.
+
+**Per-block settings.** Non-image blocks stay in the flow on purpose, so they get
+a settings popover in the chrome instead: space above/below, alignment, width,
+and a background from the contrast-tested surface set. New `BlockLayout` type on
+every node (`spaceBefore`, `spaceAfter`, `align`, `width`) resolved by
+`blockLayoutStyle()` so flow, outline, present, and public all agree. Values are
+named steps, never pixels — spacing stays on the scale.
+
+**Media modal has two states.** Browse (library left, details right) and Adjust
+(image held large and sticky on the left, controls scrolling on the right). The
+old layout put focal point, rotation, and crop *below* the preview, so adjusting
+them scrolled the thing you were adjusting off screen. Clicking an existing
+image opens Adjust; upload and add open Browse; picking a thumbnail while
+editing a block jumps to Adjust.
+
 ### Next
 
 `LIBRARIES.md` §9 step 5 — the media library on the shell, then companies (6),

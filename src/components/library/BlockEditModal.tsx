@@ -45,6 +45,14 @@ function toDoc(node: Node): SlideDoc {
   return { version: 1, blocks: [structuredClone(node)] };
 }
 
+/** Walks Nodes (not just ContentNodes) so layout blocks get settings too. */
+function mapAnyNode(nodes: Node[], id: string, update: (node: Node) => Node): Node[] {
+  return nodes.map((node) => {
+    if (node.id === id) return update(node);
+    return node.kind === "layout" ? { ...node, children: mapAnyNode(node.children, id, update) } : node;
+  });
+}
+
 function replaceNode(nodes: Node[], id: string, update: (node: ContentNode) => ContentNode): Node[] {
   return nodes.map((node) => {
     if (node.kind === "layout") return { ...node, children: replaceNode(node.children, id, update) };
@@ -158,6 +166,24 @@ export default function BlockEditModal({
       blocks: replaceNode(doc.blocks, id, (current) => (
         { ...current, props: props as typeof current.props } as ContentNode
       )),
+    }),
+    onUpdateLayout: (id, layout) => mutate({
+      ...doc,
+      blocks: mapAnyNode(doc.blocks, id, (current) => {
+        const next = { ...current };
+        if (Object.values(layout).every((value) => value === undefined)) delete next.layout;
+        else next.layout = layout;
+        return next;
+      }),
+    }),
+    onUpdateSurface: (id, surface) => mutate({
+      ...doc,
+      blocks: mapAnyNode(doc.blocks, id, (current) => {
+        const next = { ...current };
+        if (!surface || surface === "inherit") delete next.style;
+        else next.style = { ...next.style, surface };
+        return next;
+      }),
     }),
     onTransformImage: (id, update) => mutate({
       ...doc,

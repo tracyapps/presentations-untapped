@@ -37,10 +37,21 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
   const [renameMessage, setRenameMessage] = useState("");
   const [isRenaming, setIsRenaming] = useState(false);
   const [isReplacing, setIsReplacing] = useState(false);
+  /**
+   * Two states, because the controls below the preview were unusable: change the
+   * focal point or rotation and the thing you are adjusting has scrolled out of
+   * sight. In "edit" the image is held large and still while the controls sit
+   * beside it, so every change is visible as it happens.
+   *
+   * Which one opens is about intent — picking an image is a browse task,
+   * adjusting one you already chose is an edit task.
+   */
+  const [view, setView] = useState<"browse" | "edit">(image ? "edit" : "browse");
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
+    setView(image ? "edit" : "browse");
     if (image) setDraft({ ...image.props });
     else if (initialAsset) setDraft({ src: initialAsset.url, alt: defaultAlt(initialAsset), placement: "floating", x: 60, y: 18, width: 30 });
     else setDraft({ src: "", alt: "", placement: "floating", x: 60, y: 18, width: 30 });
@@ -76,6 +87,8 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
   const frameStyle = frame ? { WebkitMaskImage: `url("${frame.asset}")`, maskImage: `url("${frame.asset}")` } : undefined;
 
   function selectAsset(asset: MediaAsset) {
+    // Clicking a thumbnail is a choice, not a browse — go straight to adjusting.
+    if (image) setView("edit");
     setDraft((current) => ({ ...current, src: asset.url, alt: current.alt || defaultAlt(asset) }));
     const probe = new Image();
     probe.onload = () => {
@@ -136,10 +149,30 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
     <div className="media-modal-backdrop">
       <section className="media-modal" role="dialog" aria-modal="true" aria-labelledby="media-modal-title">
         <header className="media-modal-header">
-          <div><p className="eyebrow">{image ? "Image block" : "Media library"}</p><h2 id="media-modal-title">{image ? "Choose media" : "Preview and use media"}</h2></div>
+          <div>
+            <p className="eyebrow">{image ? "Image block" : "Media library"}</p>
+            <h2 id="media-modal-title">{view === "edit" ? "Adjust image" : "Choose media"}</h2>
+          </div>
+          {image && (
+            <div className="media-view-switch" role="radiogroup" aria-label="Media view">
+              {(["browse", "edit"] as const).map((mode) => (
+                <button
+                  key={mode} type="button" role="radio"
+                  aria-checked={view === mode}
+                  tabIndex={view === mode ? 0 : -1}
+                  className={view === mode ? "is-active" : undefined}
+                  aria-disabled={mode === "edit" && !draft.src}
+                  data-disabled={mode === "edit" && !draft.src ? true : undefined}
+                  onClick={() => { if (mode !== "edit" || draft.src) setView(mode); }}
+                >
+                  {mode === "browse" ? "Library" : "Adjust"}
+                </button>
+              ))}
+            </div>
+          )}
           <button ref={closeRef} type="button" className="media-modal-close" aria-label="Close media library" onClick={onClose}>×</button>
         </header>
-        <div className="media-modal-body">
+        <div className="media-modal-body" data-view={view}>
           <div className="media-modal-library">
             <MediaLibraryPanel
               variant="modal"
@@ -153,7 +186,7 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
             />
           </div>
           <aside className="media-modal-details" aria-label="Image details">
-            <div className="media-modal-preview">
+            <div className="media-modal-preview" data-stage={view === "edit" ? true : undefined}>
               {draft.src ? <>
                 {/* Blob and manually hosted image URLs are both supported. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -161,6 +194,10 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
                 {draft.caption && <p>{draft.caption}</p>}
               </> : <span>No image selected</span>}
             </div>
+            {/* Controls are a sibling of the preview, not below it inside one
+                scroller — that is what lets the edit view hold the image still
+                while this column scrolls. */}
+            <div className="media-modal-controls">
             {selectedAsset && <>
               <div className="media-modal-file-meta"><strong>{selectedAsset.name}</strong><span>{Math.max(1, Math.round(selectedAsset.size / 1024))} KB</span></div>
               <form className="media-rename-form" onSubmit={renameAsset}>
@@ -193,6 +230,7 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
               </div>
             </div>}
             {image && <ImageFramePicker value={draft.frame} onChange={(frameKey) => setDraft((current) => ({ ...current, frame: frameKey }))} />}
+            </div>
           </aside>
         </div>
         <footer className="media-modal-footer">

@@ -5,10 +5,12 @@ import { BlockDropZone, isActiveTarget, type BlockDndController, type BlockDropT
 import IconTooltip from "@/components/IconTooltip";
 import { AddEntry, InlineNumber, InlineString, InlineText, RemoveEntry } from "@/components/Editable";
 import type { MediaAsset } from "@/lib/data/media";
-import { clampFloatingImage, imageAspectRatio, positionFloatingImage, snapRotation } from "@/lib/image-geometry";
+import { clampFloatingImage, positionFloatingImage, snapRotation } from "@/lib/image-geometry";
 import { hasMediaDrag, readMediaDrag } from "@/lib/media-dnd";
 import { frameByKey, patternStyle, surfaceStyle } from "@/lib/slides/styles";
-import type { ContentNode, LayoutNode, Node, RichText, SlideDoc } from "@/lib/slides/types";
+import type { SurfaceChoice } from "@/lib/slides/styles";
+import BlockSettings from "@/components/BlockSettings";
+import type { BlockLayout, ContentNode, LayoutNode, Node, RichText, SlideDoc } from "@/lib/slides/types";
 import { isLayout } from "@/lib/slides/types";
 
 export type SlideCanvasEditor = {
@@ -30,7 +32,34 @@ export type SlideCanvasEditor = {
    * only through Outline's delimiter-separated textareas.
    */
   onUpdateProps: (id: string, props: Record<string, unknown>) => void;
+  /** Per-block spacing, alignment, width, and background (BlockSettings). */
+  onUpdateLayout: (id: string, layout: BlockLayout) => void;
+  onUpdateSurface: (id: string, surface: SurfaceChoice | undefined) => void;
   onSwapColumns: (node: LayoutNode) => void;
+};
+
+/** Named steps resolve to slide-relative percentages, so spacing scales with
+ *  the slide rather than being fixed pixels that break at other sizes. */
+const SPACE_SCALE: Record<string, string> = {
+  none: "0", sm: "1.2%", md: "2.6%", lg: "4.4%", xl: "7%",
+};
+
+/** Turns a block's layout settings into styles the flow renderer applies. */
+export function blockLayoutStyle(layout: BlockLayout | undefined): React.CSSProperties | undefined {
+  if (!layout) return undefined;
+  const style: React.CSSProperties = {};
+  if (layout.spaceBefore) style.marginTop = SPACE_SCALE[layout.spaceBefore];
+  if (layout.spaceAfter) style.marginBottom = SPACE_SCALE[layout.spaceAfter];
+  if (layout.width) style.width = `${layout.width * 10}%`;
+  if (layout.align && layout.align !== "stretch") {
+    style.alignSelf = layout.align;
+    // A width-limited block also needs its own margins to sit where it says.
+    if (layout.width) {
+      style.marginInlineStart = layout.align === "end" || layout.align === "center" ? "auto" : undefined;
+      style.marginInlineEnd = layout.align === "start" || layout.align === "center" ? "auto" : undefined;
+    }
+  }
+  return Object.keys(style).length ? style : undefined;
 };
 
 function Rich({ value }: { value: RichText }) {
@@ -43,12 +72,35 @@ function Rich({ value }: { value: RichText }) {
   });
 }
 
+/**
+ * Floating images are lifted out of the flow tree and rendered in one shared
+ * layer (see `SlideCanvas`). This walks the document, returning the tree with
+ * floats removed plus the floats themselves in document order.
+ *
+ * The stored document is untouched — a floating image keeps its place in the
+ * tree for Outline, drag/drop, and library snapshots. This is purely a render
+ * concern.
+ */
+function splitFloating(nodes: Node[]): { flow: Node[]; floating: ContentNode[] } {
+  const floating: ContentNode[] = [];
+  function strip(list: Node[]): Node[] {
+    const kept: Node[] = [];
+    for (const node of list) {
+      if (isFloatingImage(node)) { floating.push(node); continue; }
+      kept.push(isLayout(node) ? { ...node, children: strip(node.children) } : node);
+    }
+    return kept;
+  }
+  return { flow: strip(nodes), floating };
+}
+
 export default function SlideCanvas({ doc, theme, editor }: { doc: SlideDoc; theme: "light" | "dark"; editor?: SlideCanvasEditor }) {
   const [mediaDragOver, setMediaDragOver] = useState(false);
   const dnd = useBlockDnd((sourceId, target) => editor?.onDrop(sourceId, target));
   const slideStyle = doc.style?.pattern && doc.style.pattern !== "none"
     ? patternStyle(doc.style.pattern, theme)
     : surfaceStyle(doc.style?.surface, theme);
+  const { flow, floating } = splitFloating(doc.blocks);
   const backgroundImage = doc.style?.backgroundImage;
   const backgroundPosition = backgroundImage?.focalX !== undefined || backgroundImage?.focalY !== undefined
     ? `${backgroundImage.focalX ?? 50}% ${backgroundImage.focalY ?? (backgroundImage.position === "top" ? 0 : backgroundImage.position === "bottom" ? 100 : 50)}%`
@@ -91,9 +143,22 @@ export default function SlideCanvas({ doc, theme, editor }: { doc: SlideDoc; the
       </>}
       {editor && <span className="slide-boundary-marker" aria-hidden="true">16:9 slide boundary</span>}
       {editor ? (
-        <NodeList className="slide-canvas dnd-node-list-vertical" nodes={doc.blocks} parentId={null} axis="vertical" editor={editor} dnd={dnd} theme={theme} />
+        <NodeList className="slide-canvas dnd-node-list-vertical" nodes={flow} parentId={null} axis="vertical" editor={editor} dnd={dnd} theme={theme} />
       ) : (
-        <div className="slide-canvas">{doc.blocks.map((node) => <RenderNode node={node} theme={theme} key={node.id} />)}</div>
+        <div className="slide-canvas">{flow.map((node) => <RenderNode node={node} theme={theme} key={node.id} />)}</div>
+      )}
+      {/* One float layer for both modes.
+          Floating images used to be positioned inside whatever wrapper happened
+          to contain them, and in edit mode every block gets a `position:
+          relative` wrapper — so an image inside a group resolved its percentages
+          against the group in the editor and against the whole canvas in present
+          mode. Same document, two very different slides. Hoisting every float
+          into one layer that is always exactly the 16:9 box makes the two modes
+          identical by construction. */}
+      {floating.length > 0 && (
+        <div className="slide-float-layer">
+          {floating.map((node) => <RenderNode node={node} theme={theme} editor={editor} dnd={dnd} key={node.id} />)}
+        </div>
       )}
     </div>
   );
@@ -111,6 +176,14 @@ export function BlockTree({ nodes, theme }: { nodes: Node[]; theme: "light" | "d
   return <>{nodes.map((node) => <RenderNode node={node} theme={theme} key={node.id} />)}</>;
 }
 
+/** Wraps a flow block so its spacing, width, and alignment apply identically in
+ *  every renderer. Floats skip this — their geometry is absolute. */
+function FlowFrame({ node, children }: { node: Node; children: React.ReactNode }) {
+  const style = blockLayoutStyle(node.layout);
+  if (!style) return <>{children}</>;
+  return <div className="slide-flow-frame" style={style}>{children}</div>;
+}
+
 function NodeList({ className, nodes, parentId, axis, editor, dnd, style, theme }: { className: string; nodes: Node[]; parentId: string | null; axis: "horizontal" | "vertical"; editor: SlideCanvasEditor; dnd: BlockDndController; style?: React.CSSProperties; theme: "light" | "dark" }) {
   if (!nodes.length) {
     return <div className={`${className} is-empty-drop-container`} style={style}><BlockDropZone axis={axis} controller={dnd} target={{ parentId, index: 0 }} /></div>;
@@ -122,8 +195,9 @@ function NodeList({ className, nodes, parentId, axis, editor, dnd, style, theme 
         const after = { parentId, index: index + 1 };
         return (
           <div
-            className={`dnd-node-slot${isFloatingImage(node) ? " is-floating-slot" : ""}${isActiveTarget(dnd, before) ? " is-target-before" : ""}${index === nodes.length - 1 && isActiveTarget(dnd, after) ? " is-target-after" : ""}`}
-            style={isFloatingImage(node) ? floatingImageStyle(node) : undefined}
+            /* Floats never reach here — splitFloating() lifts them into the
+               shared float layer before the flow tree is rendered. */
+            className={`dnd-node-slot${isActiveTarget(dnd, before) ? " is-target-before" : ""}${index === nodes.length - 1 && isActiveTarget(dnd, after) ? " is-target-after" : ""}`}
             key={node.id}
           >
             <BlockDropZone axis={axis} controller={dnd} target={before} />
@@ -145,14 +219,18 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
     : undefined;
   const rendered = isLayout(node)
     ? <RenderLayout node={node} theme={theme} editor={editor} dnd={dnd} />
-    : <div className={`slide-node-surface${contentStyle ? " has-surface" : ""}${isFloatingImage(node) ? " is-floating-image" : ""}`} style={{ ...contentStyle, ...(!editor && isFloatingImage(node) ? floatingImageStyle(node) : undefined), ...rotationStyle }}><RenderContent node={node} editor={editor} /></div>;
-  if (!editor) return rendered;
+    /* Geometry lives on whichever element is the float layer's direct child —
+       the surface when read-only, the editable wrapper when editing — never on
+       both, and never at two different depths. */
+    : <div className={`slide-node-surface${contentStyle ? " has-surface" : ""}${isFloatingImage(node) ? " is-floating-image" : ""}`} style={{ ...contentStyle, ...(!editor && isFloatingImage(node) ? { ...floatingImageStyle(node), ...rotationStyle } : undefined) }}><RenderContent node={node} editor={editor} /></div>;
+  if (!editor) return isFloatingImage(node) ? rendered : <FlowFrame node={node}>{rendered}</FlowFrame>;
   const activeEditor = editor;
 
   function startImageMove(event: React.PointerEvent<HTMLElement>) {
     if (!isFloatingImage(node) || event.button !== 0) return;
     if (event.target instanceof HTMLElement && event.target.closest("button")) return;
-    const canvas = event.currentTarget.closest(".slide-canvas");
+    // Percentages are relative to the float layer, which is always the 16:9 box.
+    const canvas = event.currentTarget.closest(".slide-float-layer");
     if (!(canvas instanceof HTMLElement)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -191,7 +269,8 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
 
   function startImageResize(event: React.PointerEvent<HTMLButtonElement>) {
     if (!isFloatingImage(node) || event.button !== 0) return;
-    const canvas = event.currentTarget.closest(".slide-canvas");
+    // Percentages are relative to the float layer, which is always the 16:9 box.
+    const canvas = event.currentTarget.closest(".slide-float-layer");
     if (!(canvas instanceof HTMLElement)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -249,6 +328,7 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
     <section
       className={`editable-slide-block editable-slide-block-${node.kind}${isFloatingImage(node) ? " is-floating-image-block" : ""}${dnd?.draggingId === node.id ? " is-dragging" : ""}`}
       data-node-id={node.id}
+      style={isFloatingImage(node) ? { ...floatingImageStyle(node), ...rotationStyle } : blockLayoutStyle(node.layout)}
       tabIndex={0}
       aria-label={`${node.type} block`}
       onKeyDown={(event) => {
@@ -287,6 +367,13 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
           <IconTooltip label={<>Move <strong>down</strong></>} description={`Move this ${node.type} later.`}>
             <button type="button" onClick={() => editor.onMove(node, 1)} aria-label={`Move ${node.type} down`}>↓</button>
           </IconTooltip></>}
+          {/* Blocks other than images stay in the flow on purpose; this is where
+              the control they trade it for lives. */}
+          <BlockSettings
+            node={node}
+            onChange={(layout) => editor.onUpdateLayout(node.id, layout)}
+            onChangeSurface={(surface) => editor.onUpdateSurface(node.id, surface)}
+          />
           <IconTooltip label={<>Duplicate <em>block</em></>} description={`Create a copy of this ${node.type}.`}>
             <button type="button" onClick={() => editor.onDuplicate(node)} aria-label={`Duplicate ${node.type}`}>⧉</button>
           </IconTooltip>
@@ -314,7 +401,6 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
         tabIndex={node.type === "image" ? 0 : undefined}
         aria-label={node.type === "image" ? "Open media library for image block" : undefined}
         title={isFloatingImage(node) ? "Drag to move freely. Hold Shift while dragging to snap to slide guides." : undefined}
-        style={isFloatingImage(node) ? { aspectRatio: String(imageAspectRatio(node.props.aspectRatio)) } : undefined}
         onPointerDown={startImageMove}
         onClick={() => {
           if (node.type !== "image" || ignoreImageClick.current) return;

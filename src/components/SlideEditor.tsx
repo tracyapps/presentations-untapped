@@ -285,6 +285,38 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     setDoc((current) => ({ ...current, blocks: replaceNode(current.blocks, id, update) }));
   }
 
+
+  /** Per-block layout settings. Empty object means "back to slide defaults",
+   *  so the prop is dropped rather than stored as noise. */
+  function setNodeLayout(id: string, layout: import("@/lib/slides/types").BlockLayout) {
+    if (saveState !== "conflict") { setSaveState("dirty"); setMessage(""); }
+    const empty = Object.values(layout).every((value) => value === undefined);
+    setDoc((current) => ({ ...current, blocks: mapNode(current.blocks, id, (node) => {
+      const next = { ...node };
+      if (empty) delete next.layout; else next.layout = layout;
+      return next;
+    }) }));
+  }
+
+  function setNodeSurface(id: string, surface: import("@/lib/slides/styles").SurfaceChoice | undefined) {
+    if (saveState !== "conflict") { setSaveState("dirty"); setMessage(""); }
+    setDoc((current) => ({ ...current, blocks: mapNode(current.blocks, id, (node) => {
+      const next = { ...node };
+      if (!surface || surface === "inherit") delete next.style;
+      else next.style = { ...next.style, surface };
+      return next;
+    }) }));
+  }
+
+  /** Layout settings apply to layout blocks too, so this walks Nodes rather
+   *  than reusing the ContentNode-only replaceNode above. */
+  function mapNode(nodes: Node[], id: string, update: (node: Node) => Node): Node[] {
+    return nodes.map((node) => {
+      if (node.id === id) return update(node);
+      return isLayout(node) ? { ...node, children: mapNode(node.children, id, update) } : node;
+    });
+  }
+
   function updateSlideDesign(update: Omit<Partial<NonNullable<SlideDoc["style"]>>, "backgroundImage"> & { backgroundImage?: SlideBackgroundImage | null }) {
     if (saveState !== "conflict") {
       setSaveState("dirty");
@@ -730,6 +762,8 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             onUpdateProps: (id, props) => updateNode(id, (current) => (
               { ...current, props: props as typeof current.props } as ContentNode
             )),
+            onUpdateLayout: (id, layout) => setNodeLayout(id, layout),
+            onUpdateSurface: (id, surface) => setNodeSurface(id, surface),
             onSwapColumns: swapColumns,
           }} /></div>}
           {tab === "outline" && <div className="outline-workspace"><OutlineTree nodes={doc.blocks} media={{ items: mediaItems, onOpen: setMediaTargetId, onAssign: assignMediaToImage }} onText={updateText} onUpdate={updateNode} onMove={dropBlock} onSwapColumns={(id) => markDoc(swapLayoutChildren(docRef.current, id))} /></div>}

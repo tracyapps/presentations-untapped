@@ -1005,8 +1005,77 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 @media (prefers-reduced-motion: reduce) {
   .block-add-entry, .block-remove-entry { transition: none; }
 }
-.slide-node-surface.is-floating-image { position: absolute; z-index: 8; height: auto; aspect-ratio: 4 / 3; transform-origin: center; }
+/* The float layer is always exactly the 16:9 content box, in edit and present
+   alike, so a percentage means the same thing in both. Without this the editor
+   canvas (height:auto so blocks can overflow below the boundary) and the
+   present canvas (height:100%) resolved the same `top: 30%` differently. */
+/* No padding: absolute children resolve against the padding box either way, and
+   present mode measured against the full canvas box. Adding inset here would
+   silently shift every existing floating image. */
+.slide-float-layer { position: absolute; z-index: 8; inset: 0; pointer-events: none; }
+.slide-float-layer > * { pointer-events: auto; }
+.slide-viewport.is-editing > .slide-float-layer { z-index: 9; }
+/* Geometry is applied inline to whichever element is this layer's direct child.
+   `height: auto` lets the inline aspect-ratio drive the box; no hardcoded ratio
+   may live here or it will override the image's real one. */
+.slide-float-layer > .slide-node-surface.is-floating-image,
+.slide-float-layer > .editable-slide-block.is-floating-image-block { position: absolute; height: auto; transform-origin: center; }
+/* Chrome sits above the image instead of inset, so the editor does not shift
+   the picture down by the height of its own header. */
+.editable-slide-block.is-floating-image-block { padding-top: 0; }
+.editable-slide-block.is-floating-image-block > .block-chrome { inset: auto 0 100% 0; border-radius: calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0 0; }
 .slide-node-surface.is-floating-image .slide-figure { min-height: 100%; }
+
+
+
+/* --- Media modal: browse vs adjust (two states) -----------------------
+   Browse = library left, details right. Adjust = the image held large and
+   still on the left while its controls scroll on the right. The old
+   single-column layout put focal point, rotation, and crop *below* the
+   preview, so adjusting them scrolled the thing you were adjusting off screen. */
+.media-view-switch { display: inline-flex; gap: 2px; margin-left: auto; margin-right: var(--space-3); padding: 2px; background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+.media-view-switch button { min-height: 30px; padding: 0 var(--space-3); background: transparent; color: var(--text-secondary); border: 0; border-radius: calc(var(--radius-sm) - 2px); font: var(--text-caption); font-weight: 750; }
+.media-view-switch button:hover:not([data-disabled]) { color: var(--text-primary); }
+.media-view-switch button.is-active { background: var(--bg-surface); color: var(--accent-primary); box-shadow: var(--shadow-sm); }
+.media-view-switch button[data-disabled] { cursor: not-allowed; opacity: 0.45; }
+
+.media-modal-controls { display: grid; align-content: start; gap: var(--space-4); min-width: 0; }
+
+/* Adjust view: library out of the way, image ~2/3 and sticky. */
+.media-modal-body[data-view="edit"] .media-modal-library { display: none; }
+.media-modal-body[data-view="edit"] .media-modal-details { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); align-items: start; gap: var(--space-5); overflow: hidden; }
+.media-modal-body[data-view="edit"] .media-modal-preview[data-stage] { position: sticky; top: 0; display: grid; place-items: center; height: min(64vh, 620px); padding: var(--space-4); background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
+.media-modal-body[data-view="edit"] .media-modal-preview[data-stage] img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.media-modal-body[data-view="edit"] .media-modal-controls { max-height: min(64vh, 620px); overflow-y: auto; padding-right: var(--space-2); }
+
+@media (max-width: 1000px) {
+  .media-modal-body[data-view="edit"] .media-modal-details { grid-template-columns: minmax(0, 1fr); }
+  .media-modal-body[data-view="edit"] .media-modal-preview[data-stage] { position: static; height: 40vh; }
+  .media-modal-body[data-view="edit"] .media-modal-controls { max-height: none; overflow: visible; }
+}
+
+/* --- Per-block settings (spacing, alignment, width, background) --------
+   Only images move freely on a slide; everything else stays in the flow on
+   purpose. This popover is what blocks trade that freedom for. */
+.slide-flow-frame { min-width: 0; }
+.block-settings { position: relative; display: inline-flex; }
+.block-settings > button { display: inline-grid; width: 20px; height: 20px; place-items: center; background: transparent; color: inherit; border: 0; border-radius: var(--radius-sm); font-size: 12px; }
+.block-settings > button:hover { background: var(--bg-page); color: var(--accent-primary); }
+.block-settings > button.is-configured { color: var(--accent-primary); }
+.block-settings > button.is-configured::after { content: ""; position: absolute; top: 1px; right: 1px; width: 5px; height: 5px; background: var(--accent-primary); border-radius: 50%; }
+.block-settings-panel { position: absolute; z-index: 30; top: calc(100% + 4px); right: 0; display: grid; gap: var(--space-3); width: 250px; padding: var(--space-3); background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); text-align: left; }
+.block-settings-panel fieldset { display: grid; gap: var(--space-2); margin: 0; padding: 0; border: 0; }
+.block-settings-panel legend { padding: 0; color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.block-settings-panel select { width: 100%; min-height: 32px; padding: 0 var(--space-2); background: var(--bg-page); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-caption); }
+.block-settings-row { display: flex; gap: 2px; padding: 2px; background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+/* Real radios, visually hidden: keyboard and screen-reader behaviour for free,
+   and the group is a group rather than a row of look-alike buttons. */
+.block-settings-choice { flex: 1; display: grid; place-items: center; min-height: 28px; border-radius: calc(var(--radius-sm) - 2px); color: var(--text-secondary); font: var(--text-caption); font-weight: 750; cursor: pointer; }
+.block-settings-choice input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.block-settings-choice:hover { color: var(--text-primary); }
+.block-settings-choice:has(input:checked) { background: var(--accent-primary); color: var(--text-on-accent); }
+.block-settings-choice:has(input:focus-visible) { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
+.block-settings-reset { padding: var(--space-2) 0 0; background: transparent; color: var(--accent-primary); border: 0; border-top: 1px solid var(--border-default); font: var(--text-caption); font-weight: 750; text-align: left; }
 
 .editable-slide-block { min-width: 0; position: relative; padding-top: 24px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
 .editable-slide-block, .outline-block, .outline-layout, .dnd-node-slot, .outline-node-slot { transition: opacity 140ms ease, transform 140ms ease; }
@@ -1053,12 +1122,15 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .slide-layout > .dnd-node-slot > .editable-slide-block { height: 100%; }
 .slide-layout-columns > .dnd-node-slot, .slide-layout-grid > .dnd-node-slot { width: auto; }
 .dnd-node-slot, .outline-node-slot { min-width: 0; position: relative; }
-.dnd-node-slot.is-floating-slot { position: absolute; z-index: 8; }
-.dnd-node-slot.is-floating-slot > .editable-slide-block { height: auto; background: color-mix(in srgb, var(--bg-page) 12%, transparent); }
-.dnd-node-slot.is-floating-slot .editable-block-content { aspect-ratio: 4 / 3; }
-.dnd-node-slot.is-floating-slot .slide-node-surface, .dnd-node-slot.is-floating-slot .slide-figure { height: 100%; }
-.dnd-node-slot.is-floating-slot .editable-block-content > .slide-node-surface { pointer-events: none; }
-.dnd-node-slot.is-floating-slot .editable-block-content.is-image-picker { cursor: move; touch-action: none; }
+/* Floating images render in .slide-float-layer in both modes; the old
+   slot-based positioning is gone. Anything left here would silently re-create
+   the edit/present divergence. */
+.editable-slide-block.is-floating-image-block { height: auto; background: color-mix(in srgb, var(--bg-page) 12%, transparent); }
+.editable-slide-block.is-floating-image-block .editable-block-content,
+.editable-slide-block.is-floating-image-block .slide-node-surface,
+.editable-slide-block.is-floating-image-block .slide-figure { height: 100%; }
+.editable-slide-block.is-floating-image-block .editable-block-content > .slide-node-surface { pointer-events: none; }
+.editable-slide-block.is-floating-image-block .editable-block-content.is-image-picker { cursor: move; touch-action: none; }
 .floating-image-resize-handle, .floating-image-rotate-handle { position: absolute; z-index: 31; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; background: var(--accent-primary); color: var(--text-on-accent); border: 2px solid var(--bg-page); border-radius: var(--radius-pill); box-shadow: var(--shadow-sm); opacity: 0.72; touch-action: none; transition: opacity 120ms ease, transform 120ms ease; }
 .floating-image-resize-handle { right: -14px; bottom: -14px; cursor: nwse-resize; }
 .floating-image-rotate-handle { top: -38px; left: calc(50% - 14px); cursor: grab; }

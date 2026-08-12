@@ -100,3 +100,11 @@ export function patternStyle(pattern: SlidePatternChoice | undefined, theme: "li
 export function frameByKey(frame: ImageFrameKey | undefined): FrameDefinition | undefined {
   return IMAGE_FRAMES.find((item) => item.key === frame);
 }
+
+/** Surface options for a block-level background picker. Named, contrast-tested
+ *  recipes only — a raw colour picker is how a deck ends up with unreadable
+ *  text in dark mode. */
+export const SURFACE_CHOICES: Array<{ value: SurfaceChoice; label: string }> = [
+  { value: "inherit", label: "None (slide default)" },
+  ...SURFACES.map((surface) => ({ value: surface.key as SurfaceChoice, label: surface.label })),
+];
