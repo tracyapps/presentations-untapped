@@ -153,6 +153,12 @@ export default function BlockEditModal({
           : current
       )),
     }),
+    onUpdateProps: (id, props) => mutate({
+      ...doc,
+      blocks: replaceNode(doc.blocks, id, (current) => (
+        { ...current, props: props as typeof current.props } as ContentNode
+      )),
+    }),
     onTransformImage: (id, update) => mutate({
       ...doc,
       blocks: replaceNode(doc.blocks, id, (current) => (

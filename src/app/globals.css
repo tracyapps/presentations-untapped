@@ -967,6 +967,44 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .rich-sm { font-size: 0.8em; }.rich-lg { font-size: 1.2em; }
 .direct-text-editor { display: inline; min-width: 1ch; cursor: text; border-radius: 3px; outline: none; }
 .direct-text-editor:focus { background: color-mix(in srgb, var(--bg-page) 42%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 34%, transparent); }
+/* An empty field still has to be findable and clickable — a zero-width target
+   is how optional captions and details become invisible and unfillable. */
+.direct-text-editor[data-empty]::before { content: attr(data-placeholder); color: var(--text-secondary); font-style: italic; opacity: 0.65; }
+.direct-text-editor[data-empty]:focus::before { content: ""; }
+.direct-number-editor { width: 5.5ch; padding: 2px var(--space-1); background: transparent; color: inherit; border: 1px solid var(--border-default); border-radius: 3px; font: inherit; font-variant-numeric: tabular-nums; text-align: right; }
+.direct-number-editor:focus { border-color: var(--accent-primary); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 34%, transparent); }
+
+/* --- Editable collections (add/remove inside a block) -----------------
+   Controls stay out of the way until the block is hovered or something inside
+   it has focus, so an editable slide still reads as a slide. They are never
+   display:none — that would take them out of the tab order and make the whole
+   pattern keyboard-inaccessible. */
+.slide-editable-collection { display: grid; gap: var(--space-2); }
+.slide-collection-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
+.block-add-entry { display: inline-flex; align-items: center; gap: var(--space-1); padding: 2px var(--space-2); background: transparent; color: currentColor; border: 1px dashed currentColor; border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 750; opacity: 0.45; transition: opacity var(--duration-fast) var(--ease-out); }
+.block-remove-entry { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-left: var(--space-1); padding: 0; background: transparent; color: currentColor; border: 0; border-radius: 50%; font-size: 12px; line-height: 1; opacity: 0; transition: opacity var(--duration-fast) var(--ease-out); }
+
+.slide-node-surface:hover .block-add-entry,
+.slide-node-surface:focus-within .block-add-entry { opacity: 0.85; }
+.slide-node-surface:hover .block-remove-entry,
+.slide-node-surface:focus-within .block-remove-entry { opacity: 0.5; }
+.block-add-entry:hover, .block-add-entry:focus-visible { opacity: 1; border-style: solid; }
+.block-remove-entry:hover:not([data-disabled]), .block-remove-entry:focus-visible { opacity: 1; background: var(--status-danger); color: var(--lu-white); }
+/* Always reachable by keyboard even before the pointer arrives. */
+.block-add-entry:focus-visible, .block-remove-entry:focus-visible { opacity: 1; outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.block-remove-entry[data-disabled] { cursor: not-allowed; opacity: 0.2; }
+
+.slide-inline-check { display: inline-flex; align-items: center; gap: var(--space-1); font: var(--text-caption); opacity: 0.6; }
+.slide-node-surface:hover .slide-inline-check, .slide-node-surface:focus-within .slide-inline-check { opacity: 1; }
+
+.slide-chart-data { display: grid; gap: var(--space-1); margin: var(--space-3) 0 0; padding: 0; list-style: none; }
+.slide-chart-data li { display: flex; align-items: center; gap: var(--space-2); font: var(--text-caption); }
+.slide-chart-data li > .direct-text-editor { flex: 1 1 auto; min-width: 4ch; }
+
+@media (prefers-reduced-motion: reduce) {
+  .block-add-entry, .block-remove-entry { transition: none; }
+}
 .slide-node-surface.is-floating-image { position: absolute; z-index: 8; height: auto; aspect-ratio: 4 / 3; transform-origin: center; }
 .slide-node-surface.is-floating-image .slide-figure { min-height: 100%; }
 

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { BlockDropZone, isActiveTarget, type BlockDndController, type BlockDropTarget, useBlockDnd } from "@/components/BlockDnd";
 import IconTooltip from "@/components/IconTooltip";
+import { AddEntry, InlineNumber, InlineString, InlineText, RemoveEntry } from "@/components/Editable";
 import type { MediaAsset } from "@/lib/data/media";
 import { clampFloatingImage, imageAspectRatio, positionFloatingImage, snapRotation } from "@/lib/image-geometry";
 import { hasMediaDrag, readMediaDrag } from "@/lib/media-dnd";
@@ -21,6 +22,14 @@ export type SlideCanvasEditor = {
   onAddFloatingMedia: (asset: MediaAsset, position: { x: number; y: number }) => void;
   onTransformImage: (id: string, update: Partial<Extract<ContentNode, { type: "image" }>["props"]>) => void;
   onText: (id: string, text: string) => void;
+  /**
+   * Writes any content prop on any block. `onText` predates this and stays for
+   * the five plain text types; everything else — stat values, list items,
+   * process steps, table cells, pricing tiers, chart data — goes through here,
+   * which is what makes every block fully editable on the canvas rather than
+   * only through Outline's delimiter-separated textareas.
+   */
+  onUpdateProps: (id: string, props: Record<string, unknown>) => void;
   onSwapColumns: (node: LayoutNode) => void;
 };
 
@@ -136,7 +145,7 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
     : undefined;
   const rendered = isLayout(node)
     ? <RenderLayout node={node} theme={theme} editor={editor} dnd={dnd} />
-    : <div className={`slide-node-surface${contentStyle ? " has-surface" : ""}${isFloatingImage(node) ? " is-floating-image" : ""}`} style={{ ...contentStyle, ...(!editor && isFloatingImage(node) ? floatingImageStyle(node) : undefined), ...rotationStyle }}><RenderContent node={node} onText={editor?.onText} /></div>;
+    : <div className={`slide-node-surface${contentStyle ? " has-surface" : ""}${isFloatingImage(node) ? " is-floating-image" : ""}`} style={{ ...contentStyle, ...(!editor && isFloatingImage(node) ? floatingImageStyle(node) : undefined), ...rotationStyle }}><RenderContent node={node} editor={editor} /></div>;
   if (!editor) return rendered;
   const activeEditor = editor;
 
@@ -369,25 +378,6 @@ function RenderLayout({ node, theme, editor, dnd }: { node: LayoutNode; theme: "
   );
 }
 
-function editableText(value: RichText): string {
-  return value.map((part) => part.text).join("");
-}
-
-function InlineText({ value, onChange, className }: { value: RichText; onChange: (text: string) => void; className?: string }) {
-  return <span
-    className={`direct-text-editor${className ? ` ${className}` : ""}`}
-    contentEditable="plaintext-only"
-    suppressContentEditableWarning
-    spellCheck
-    dir="ltr"
-    lang="en"
-    onBlur={(event) => {
-      const text = event.currentTarget.innerText.replace(/\n$/, "");
-      if (text !== editableText(value)) onChange(text);
-    }}
-  >{editableText(value)}</span>;
-}
-
 function isFloatingImage(node: Node): node is Extract<ContentNode, { type: "image" }> {
   return !isLayout(node) && node.type === "image" && node.props.placement === "floating";
 }
@@ -402,36 +392,258 @@ function floatingImageStyle(node: Extract<ContentNode, { type: "image" }>): Reac
   };
 }
 
-function RenderContent({ node, onText }: { node: ContentNode; onText?: (id: string, text: string) => void }) {
+/**
+ * Every block type, fully editable in place.
+ *
+ * Previously only the five plain-text types could be edited on the canvas;
+ * stats, lists, process steps, tables, pricing tiers, and charts were readable
+ * but only editable through Outline's delimiter-separated textareas, where a
+ * `|` inside someone's copy silently broke the row. Now every visible string is
+ * an editable region and every repeatable collection can grow and shrink.
+ *
+ * `editor` absent means present/public/preview rendering — no editing affordance
+ * is emitted at all, so published output is byte-identical to before.
+ */
+function RenderContent({ node, editor }: { node: ContentNode; editor?: SlideCanvasEditor }) {
+  const onText = editor?.onText;
+  /** Typed prop writer scoped to this node. */
+  const set = (props: Record<string, unknown>) => editor?.onUpdateProps(node.id, props);
+
   switch (node.type) {
-    case "title": return <h2 className="slide-title">{onText ? <InlineText value={node.props.text} onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</h2>;
-    case "tagline": return <p className="slide-tagline">{onText ? <InlineText value={node.props.text} onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</p>;
-    case "paragraph": return <p className="slide-paragraph">{onText ? <InlineText value={node.props.text} onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</p>;
-    case "blockquote": return <blockquote>{onText ? <InlineText value={node.props.text} onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}{node.props.attribution && <cite>{node.props.attribution}</cite>}</blockquote>;
-    case "callout": return <aside className={`slide-callout callout-${node.props.variant}`}>{onText ? <InlineText value={node.props.text} onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</aside>;
+    case "title": return <h2 className="slide-title">{onText ? <InlineText value={node.props.text} label="Title" onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</h2>;
+    case "tagline": return <p className="slide-tagline">{onText ? <InlineText value={node.props.text} label="Tagline" onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</p>;
+    case "paragraph": return <p className="slide-paragraph">{onText ? <InlineText value={node.props.text} label="Paragraph" placeholder="Add supporting copy" multiline onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</p>;
+
+    case "blockquote": {
+      const props = node.props;
+      return <blockquote>
+        {onText ? <InlineText value={props.text} label="Quote" multiline onChange={(text) => onText(node.id, text)} /> : <Rich value={props.text} />}
+        {/* Attribution was previously only reachable from Outline. */}
+        {editor
+          ? <cite><InlineString value={props.attribution ?? ""} label="Quote attribution" placeholder="Who said it" onChange={(attribution) => set({ ...props, attribution })} /></cite>
+          : props.attribution && <cite>{props.attribution}</cite>}
+      </blockquote>;
+    }
+
+    case "callout": return <aside className={`slide-callout callout-${node.props.variant}`}>{onText ? <InlineText value={node.props.text} label="Callout" multiline onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</aside>;
+
     case "image": {
-      const frame = frameByKey(node.props.frame);
+      const props = node.props;
+      const frame = frameByKey(props.frame);
       const frameStyle = frame ? { WebkitMaskImage: `url("${frame.asset}")`, maskImage: `url("${frame.asset}")` } : undefined;
-      const image = node.props.src ? (
+      const image = props.src ? (
       // User-provided image URLs can come from configured client or Blob hosts.
       // eslint-disable-next-line @next/next/no-img-element
-        <img className={`slide-image${frame ? " has-frame" : ""}`} draggable={false} style={{ ...frameStyle, objectFit: node.props.fit ?? "cover", objectPosition: `${node.props.focalX ?? 50}% ${node.props.focalY ?? 50}%` }} src={node.props.src} alt={node.props.decorative ? "" : node.props.alt} />
+        <img className={`slide-image${frame ? " has-frame" : ""}`} draggable={false} style={{ ...frameStyle, objectFit: props.fit ?? "cover", objectPosition: `${props.focalX ?? 50}% ${props.focalY ?? 50}%` }} src={props.src} alt={props.decorative ? "" : props.alt} />
       ) : <div className={`slide-image-placeholder${frame ? " has-frame" : ""}`} style={frameStyle} role="img" aria-label="Empty image block">Image</div>;
-      return <figure className="slide-figure">{image}{node.props.caption && <figcaption>{node.props.caption}</figcaption>}</figure>;
+      return <figure className="slide-figure">
+        {image}
+        {editor
+          ? <figcaption><InlineString value={props.caption ?? ""} label="Image caption" placeholder="Add a caption" onChange={(caption) => set({ ...props, caption })} /></figcaption>
+          : props.caption && <figcaption>{props.caption}</figcaption>}
+      </figure>;
     }
+
     case "list": {
-      const List = node.props.ordered ? "ol" : "ul";
-      return <List className="slide-list">{node.props.items.map((item, index) => <li key={index}><Rich value={item} /></li>)}</List>;
+      const props = node.props;
+      const List = props.ordered ? "ol" : "ul";
+      if (!editor) {
+        return <List className="slide-list">{props.items.map((item, index) => <li key={index}><Rich value={item} /></li>)}</List>;
+      }
+      const setItems = (items: RichText[]) => set({ ...props, items });
+      return <div className="slide-editable-collection">
+        <List className="slide-list">
+          {props.items.map((item, index) => (
+            <li key={index}>
+              <InlineString
+                value={item.map((part) => part.text).join("")}
+                label={`List item ${index + 1}`} placeholder="List item"
+                onChange={(text) => setItems(props.items.map((entry, i) => i === index ? [{ text }] : entry))}
+              />
+              <RemoveEntry
+                label={`Remove list item ${index + 1}`}
+                disabledReason={props.items.length <= 1 ? "A list needs at least one item." : null}
+                onClick={() => setItems(props.items.filter((_, i) => i !== index))}
+              />
+            </li>
+          ))}
+        </List>
+        <AddEntry label="Add item" onClick={() => setItems([...props.items, [{ text: "New item" }]])} />
+      </div>;
     }
-    case "process": return <ol className={`slide-process is-${node.props.direction}`}>
-      {node.props.steps.map((step, index) => <li key={index}>
-        <span className="slide-process-marker" aria-hidden="true">{index + 1}</span>
-        <div><strong>{step.title}</strong>{step.detail && <small>{step.detail}</small>}</div>
-      </li>)}
-    </ol>;
-    case "statCard": return <div className="slide-stat"><strong>{node.props.value}</strong><span>{node.props.label}</span>{node.props.caption && <small>{node.props.caption}</small>}</div>;
-    case "table": return <table className="slide-data-table"><thead><tr>{node.props.header.map((cell, i) => <th key={i}>{cell}</th>)}</tr></thead><tbody>{node.props.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>)}</tbody></table>;
-    case "pricingTable": return <div className="slide-pricing">{node.props.columns.map((column, i) => <div className={column.highlighted ? "is-highlighted" : ""} key={i}><h3>{column.name}</h3><strong>{column.price}</strong><ul>{column.features.map((feature, j) => <li key={j}>{feature}</li>)}</ul></div>)}</div>;
-    case "chart": return <div className="slide-chart" role="img" aria-label={`${node.props.chartType} chart with ${node.props.series.length} values`}>{node.props.series.map((value, i) => <span style={{ height: `${Math.max(4, Math.min(100, value))}%` }} title={`${node.props.labels[i] ?? i}: ${value}`} key={i} />)}</div>;
+
+    case "process": {
+      const props = node.props;
+      if (!editor) {
+        return <ol className={`slide-process is-${props.direction}`}>
+          {props.steps.map((step, index) => <li key={index}>
+            <span className="slide-process-marker" aria-hidden="true">{index + 1}</span>
+            <div><strong>{step.title}</strong>{step.detail && <small>{step.detail}</small>}</div>
+          </li>)}
+        </ol>;
+      }
+      const setSteps = (steps: typeof props.steps) => set({ ...props, steps });
+      return <div className="slide-editable-collection">
+        <ol className={`slide-process is-${props.direction}`}>
+          {props.steps.map((step, index) => <li key={index}>
+            <span className="slide-process-marker" aria-hidden="true">{index + 1}</span>
+            <div>
+              <strong><InlineString value={step.title} label={`Step ${index + 1} title`} placeholder="Step title" onChange={(title) => setSteps(props.steps.map((entry, i) => i === index ? { ...entry, title } : entry))} /></strong>
+              <small><InlineString value={step.detail ?? ""} label={`Step ${index + 1} detail`} placeholder="Optional detail" onChange={(detail) => setSteps(props.steps.map((entry, i) => i === index ? { ...entry, detail } : entry))} /></small>
+            </div>
+            <RemoveEntry
+              label={`Remove step ${index + 1}`}
+              disabledReason={props.steps.length <= 2 ? "A process needs at least two steps." : null}
+              onClick={() => setSteps(props.steps.filter((_, i) => i !== index))}
+            />
+          </li>)}
+        </ol>
+        <AddEntry label="Add step" onClick={() => setSteps([...props.steps, { title: "New step", detail: "" }])} />
+      </div>;
+    }
+
+    case "statCard": {
+      const props = node.props;
+      if (!editor) {
+        return <div className="slide-stat"><strong>{props.value}</strong><span>{props.label}</span>{props.caption && <small>{props.caption}</small>}</div>;
+      }
+      return <div className="slide-stat">
+        <strong><InlineString value={props.value} label="Stat value" placeholder="0%" onChange={(value) => set({ ...props, value })} /></strong>
+        <span><InlineString value={props.label} label="Stat label" placeholder="What it measures" onChange={(label) => set({ ...props, label })} /></span>
+        <small><InlineString value={props.caption ?? ""} label="Stat caption" placeholder="Optional context" onChange={(caption) => set({ ...props, caption })} /></small>
+      </div>;
+    }
+
+    case "table": {
+      const props = node.props;
+      if (!editor) {
+        return <table className="slide-data-table"><thead><tr>{props.header.map((cell, i) => <th key={i}>{cell}</th>)}</tr></thead><tbody>{props.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>)}</tbody></table>;
+      }
+      const columnCount = props.header.length;
+      // Columns are added and removed across the header and every row together,
+      // so the table can never end up ragged.
+      const addColumn = () => set({
+        header: [...props.header, `Column ${columnCount + 1}`],
+        rows: props.rows.map((row) => [...row, ""]),
+      });
+      const removeColumn = (index: number) => set({
+        header: props.header.filter((_, i) => i !== index),
+        rows: props.rows.map((row) => row.filter((_, i) => i !== index)),
+      });
+      return <div className="slide-editable-collection">
+        <table className="slide-data-table">
+          <thead><tr>
+            {props.header.map((cell, index) => <th key={index}>
+              <InlineString value={cell} label={`Column ${index + 1} heading`} placeholder="Heading" onChange={(text) => set({ ...props, header: props.header.map((entry, i) => i === index ? text : entry) })} />
+              <RemoveEntry
+                label={`Remove column ${index + 1}`}
+                disabledReason={columnCount <= 1 ? "A table needs at least one column." : null}
+                onClick={() => removeColumn(index)}
+              />
+            </th>)}
+          </tr></thead>
+          <tbody>
+            {props.rows.map((row, rowIndex) => <tr key={rowIndex}>
+              {Array.from({ length: columnCount }, (_, columnIndex) => <td key={columnIndex}>
+                <InlineString
+                  value={row[columnIndex] ?? ""}
+                  label={`${props.header[columnIndex] || `Column ${columnIndex + 1}`}, row ${rowIndex + 1}`}
+                  placeholder="—"
+                  onChange={(text) => set({ ...props, rows: props.rows.map((entry, i) => i === rowIndex ? Array.from({ length: columnCount }, (_, j) => j === columnIndex ? text : entry[j] ?? "") : entry) })}
+                />
+                {columnIndex === columnCount - 1 && <RemoveEntry
+                  label={`Remove row ${rowIndex + 1}`}
+                  disabledReason={props.rows.length <= 1 ? "A table needs at least one row." : null}
+                  onClick={() => set({ ...props, rows: props.rows.filter((_, i) => i !== rowIndex) })}
+                />}
+              </td>)}
+            </tr>)}
+          </tbody>
+        </table>
+        <div className="slide-collection-actions">
+          <AddEntry label="Add row" onClick={() => set({ ...props, rows: [...props.rows, Array.from({ length: columnCount }, () => "")] })} />
+          <AddEntry label="Add column" onClick={addColumn} />
+        </div>
+      </div>;
+    }
+
+    case "pricingTable": {
+      const props = node.props;
+      if (!editor) {
+        return <div className="slide-pricing">{props.columns.map((column, i) => <div className={column.highlighted ? "is-highlighted" : ""} key={i}><h3>{column.name}</h3><strong>{column.price}</strong><ul>{column.features.map((feature, j) => <li key={j}>{feature}</li>)}</ul></div>)}</div>;
+      }
+      const setColumns = (columns: typeof props.columns) => set({ ...props, columns });
+      const patch = (index: number, update: Partial<(typeof props.columns)[number]>) =>
+        setColumns(props.columns.map((entry, i) => i === index ? { ...entry, ...update } : entry));
+      return <div className="slide-editable-collection">
+        <div className="slide-pricing">
+          {props.columns.map((column, index) => <div className={column.highlighted ? "is-highlighted" : ""} key={index}>
+            <h3><InlineString value={column.name} label={`Tier ${index + 1} name`} placeholder="Tier name" onChange={(name) => patch(index, { name })} /></h3>
+            <strong><InlineString value={column.price} label={`Tier ${index + 1} price`} placeholder="$0" onChange={(price) => patch(index, { price })} /></strong>
+            <ul>
+              {column.features.map((feature, featureIndex) => <li key={featureIndex}>
+                <InlineString
+                  value={feature} label={`${column.name || `Tier ${index + 1}`} feature ${featureIndex + 1}`} placeholder="Feature"
+                  onChange={(text) => patch(index, { features: column.features.map((entry, i) => i === featureIndex ? text : entry) })}
+                />
+                <RemoveEntry
+                  label={`Remove feature ${featureIndex + 1} from ${column.name || `tier ${index + 1}`}`}
+                  disabledReason={column.features.length <= 1 ? "A tier needs at least one feature." : null}
+                  onClick={() => patch(index, { features: column.features.filter((_, i) => i !== featureIndex) })}
+                />
+              </li>)}
+            </ul>
+            <div className="slide-collection-actions">
+              <AddEntry label="Add feature" onClick={() => patch(index, { features: [...column.features, "New feature"] })} />
+              <label className="slide-inline-check">
+                <input type="checkbox" checked={column.highlighted ?? false} onChange={(event) => patch(index, { highlighted: event.target.checked })} />
+                Highlight
+              </label>
+              <RemoveEntry
+                label={`Remove ${column.name || `tier ${index + 1}`}`}
+                disabledReason={props.columns.length <= 1 ? "A pricing table needs at least one tier." : null}
+                onClick={() => setColumns(props.columns.filter((_, i) => i !== index))}
+              />
+            </div>
+          </div>)}
+        </div>
+        <AddEntry label="Add tier" onClick={() => setColumns([...props.columns, { name: "New tier", price: "$0", features: ["Feature"] }])} />
+      </div>;
+    }
+
+    case "chart": {
+      const props = node.props;
+      if (!editor) {
+        return <div className="slide-chart" role="img" aria-label={`${props.chartType} chart with ${props.series.length} values`}>{props.series.map((value, i) => <span style={{ height: `${Math.max(4, Math.min(100, value))}%` }} title={`${props.labels[i] ?? i}: ${value}`} key={i} />)}</div>;
+      }
+      // Labels and values are edited as one list of points so they cannot drift
+      // out of step with each other, which the two comma-separated Outline
+      // fields allowed.
+      const setPoint = (index: number, label: string, value: number) => set({
+        ...props,
+        labels: props.labels.map((entry, i) => i === index ? label : entry),
+        series: props.series.map((entry, i) => i === index ? value : entry),
+      });
+      return <div className="slide-editable-collection">
+        <div className="slide-chart" role="img" aria-label={`${props.chartType} chart with ${props.series.length} values`}>
+          {props.series.map((value, i) => <span style={{ height: `${Math.max(4, Math.min(100, value))}%` }} title={`${props.labels[i] ?? i}: ${value}`} key={i} />)}
+        </div>
+        <ul className="slide-chart-data">
+          {props.series.map((value, index) => <li key={index}>
+            <InlineString value={props.labels[index] ?? ""} label={`Data point ${index + 1} label`} placeholder="Label" onChange={(label) => setPoint(index, label, value)} />
+            <InlineNumber value={value} label={`Data point ${index + 1} value`} onChange={(next) => setPoint(index, props.labels[index] ?? "", next)} />
+            <RemoveEntry
+              label={`Remove data point ${index + 1}`}
+              disabledReason={props.series.length <= 1 ? "A chart needs at least one value." : null}
+              onClick={() => set({ ...props, labels: props.labels.filter((_, i) => i !== index), series: props.series.filter((_, i) => i !== index) })}
+            />
+          </li>)}
+        </ul>
+        <AddEntry
+          label="Add data point"
+          onClick={() => set({ ...props, labels: [...props.labels, `Point ${props.labels.length + 1}`], series: [...props.series, 50] })}
+        />
+      </div>;
+    }
   }
 }

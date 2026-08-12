@@ -727,6 +727,9 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             onAddFloatingMedia: addFloatingImageFromMedia,
             onTransformImage: transformImage,
             onText: updateText,
+            onUpdateProps: (id, props) => updateNode(id, (current) => (
+              { ...current, props: props as typeof current.props } as ContentNode
+            )),
             onSwapColumns: swapColumns,
           }} /></div>}
           {tab === "outline" && <div className="outline-workspace"><OutlineTree nodes={doc.blocks} media={{ items: mediaItems, onOpen: setMediaTargetId, onAssign: assignMediaToImage }} onText={updateText} onUpdate={updateNode} onMove={dropBlock} onSwapColumns={(id) => markDoc(swapLayoutChildren(docRef.current, id))} /></div>}

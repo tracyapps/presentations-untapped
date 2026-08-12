@@ -145,6 +145,44 @@ bookmark; the star is now only ever a personal favorite.
   and explains itself. Media swapping is not wired in yet — see §12.
 - No duplicate action anywhere, on purpose. `LIBRARIES.md` §12 records why.
 
+### Block editability sweep (Aug 12, evening)
+
+Every block type is now fully editable on the canvas. `npx tsc --noEmit` clean,
+**nine** test scripts passing (`test:blocks` is new).
+
+**What was actually broken.** Only the five plain-text types (title, tagline,
+paragraph, blockquote body, callout body) could be edited on the canvas.
+Everything else — stat values, list items, process steps, table cells, pricing
+tiers, chart data, blockquote attribution, image caption — was readable but only
+editable through Outline's delimiter-separated textareas (`Title | detail`,
+`col | col`). Those silently corrupt any copy containing a `|`.
+
+**What changed**
+
+- `SlideCanvasEditor` gains `onUpdateProps(id, props)` — the general prop writer.
+  `onText` stays for the five text types. Wired in `SlideEditor` and
+  `BlockEditModal`.
+- `src/components/Editable.tsx` — `InlineString`, `InlineText`, `InlineNumber`,
+  `AddEntry`, `RemoveEntry`. Commit-on-blur so a controlled re-render never
+  fights the caret; Enter commits, Escape reverts.
+- `RenderContent` rewritten: every visible string is an editable region with its
+  own accessible name ("Step 2 title", not "edit text" fourteen times).
+- Growable collections: **Add item / step / row / column / tier / feature / data
+  point**, each with a labelled remove that disables with a reason at the
+  minimum count rather than disappearing.
+- Table add/remove column rewrites the header and every row together, so it can
+  never go ragged. Chart labels and values are edited as paired points, so they
+  cannot drift out of step the way two comma-separated Outline fields allowed.
+- Empty fields show a placeholder via `[data-empty]::before` — a zero-width
+  target is how optional captions became unfillable.
+- Add/remove controls fade in on hover or focus-within, but are never
+  `display: none`; that would drop them from the tab order.
+
+**`npm run test:blocks`** asserts every `ContentType` has a `RenderContent` case,
+a recorded set of editable fields, an add control per collection, a `!editor`
+bail-out so published decks emit no editing affordances, and a `label` on every
+inline editor. Adding a block type without an editing path now fails the suite.
+
 ### Next
 
 `LIBRARIES.md` §9 step 5 — the media library on the shell, then companies (6),
