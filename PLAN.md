@@ -3,9 +3,9 @@
 Internal tool for spinning up client pitch decks: block-based slide editor, reusable library, per-slide voiceovers with captions, internal draft review, and one-click publishing to a public URL under loyaltyuntapped.com.
 
 **Target: usable by Thursday EOD (Aug 13, 2026).** The reconciled sequence in
-§9 reflects the actual August 11 implementation state.
+§9 reflects the actual August 12 implementation state.
 
-## Implementation snapshot — August 11, 2026
+## Implementation snapshot — August 12, 2026
 
 The deployed and local app currently has Clerk authentication, Neon persistence,
 deck creation/dashboard flows, a three-view editor shell, safe slide autosave,
@@ -15,14 +15,18 @@ slide styles, SVG backgrounds, and LU image masks. Design mode shows a labeled
 16:9 boundary while keeping overflow reachable for editing. Outline is a
 natural-height content/structure editor and intentionally contains no design
 controls. Per-slide voiceover upload, the shared accessible player, manual
-caption cues, and internal present mode are implemented. Review/publishing and
-public routes remain planned.
+caption cues, and internal present mode are implemented. The editor also has a
+horizontal multi-view slide navigator, resizable/hideable workspace regions,
+full media management, and free floating-image manipulation with proportional
+resize, rotation, crop/focal controls, and explicit Shift snapping.
+Review/publishing and public routes remain planned.
 
-**Next development milestone:** reconcile the provisional collateral-backed
-inventory in `BLOCK-INVENTORY.md` against collected real marketing decks, then
-continue implementing missing high-value content blocks. The first inventory
-slice—a direction-aware process block with timeline/process templates—is now in
-place. See `HANDOFF.md` for the exact pickup checklist.
+**Next development milestone:** apply the incoming UI/UX wireframes, beginning
+with one consolidated design-software-style image properties surface for
+alignment and z-order. Then reconcile the provisional collateral-backed
+inventory in `BLOCK-INVENTORY.md` against representative marketing decks and
+implement the highest-value missing templates. See `HANDOFF.md` for the exact
+pickup checklist.
 
 ---
 
@@ -219,14 +223,15 @@ One-time setup, ~10 minutes, then publishing is fully automatic forever:
 
 ---
 
-## 9. Development sequence — reconciled August 11
+## 9. Development sequence — reconciled August 12
 
 | Status | Milestone | Remaining boundary |
 |---|---|---|
 | Complete | Foundation: repo, tokens/fonts, schema, Clerk, Neon, deployment | Public DNS is still pending |
 | Complete | Dashboard, deck creation, slide persistence/management, editor shell, layouts, autosave | Client settings/CRUD beyond deck creation is still planned |
 | Complete | Nested block editor, cross-container DnD, Outline, block library, media library, slide styles, SVG themes/masks | More real-world block/template coverage is needed |
-| **Next** | Audit collected marketing decks and implement the prioritized reusable block/template set | Keep content-model additions compatible with Design, Outline, library snapshots, and future present mode |
+| Complete | Horizontal slide navigation, flexible workspace panels, full media viewer/management, and floating-image transforms | Final alignment/layer properties UI waits for updated wireframes |
+| **Next** | Apply updated wireframes, then audit collected marketing decks and implement the prioritized reusable block/template set | Keep content-model additions compatible with Design, Outline, library snapshots, and present mode |
 | Complete | Voiceover upload, player, manual cues, and waveform-assisted script timing | Uses the existing `voiceovers` schema and isolated Vercel Blob audio policy |
 | In progress | MVP finish: review/status flow, public approved-deck route, DNS, end-to-end accessibility pass | Internal present mode is complete; keep public routes logged-out accessible |
 | Post-MVP | Comments, client settings, merge tags, recording/transcription, analytics, PDF export | See parking lot below |

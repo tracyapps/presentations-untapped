@@ -6,7 +6,7 @@ See [PLAN.md](PLAN.md) for the full product and technical plan. Start with
 
 ## Current roadmap status
 
-_Last reconciled with the codebase: August 11, 2026._
+_Last reconciled with the codebase: August 12, 2026._
 
 - [x] App scaffold, LU tokens/fonts, and light/dark theme
 - [x] Neon schema configured and pushed
@@ -22,6 +22,9 @@ _Last reconciled with the codebase: August 11, 2026._
 - [x] Reusable media library UI with drag/drop and drive browsing
 - [x] Full-screen media picker with reusable references, deletion, alt text, captions, and frames
 - [x] Floating image placement plus per-slide image backgrounds with crop/overlay controls
+- [x] Free floating-image drag, proportional resize, rotation, focal crop, and Shift-to-snap guides
+- [x] Horizontal slide navigator views plus resizable/hideable editor regions
+- [ ] Apply updated UI/UX wireframes, including consolidated image alignment/layer properties (next design milestone)
 - [x] Structural row/columns/group blocks plus column swapping
 - [x] Collapsible palettes with remembered state
 - [x] Editor-only 16:9 boundary with reachable overflow; natural-height Outline view
@@ -91,8 +94,10 @@ the previous Blob; caption cues remain in Neon with the voiceover record.
 npx tsc --noEmit
 npm run test:audio
 npm run test:captions
+npm run test:image-geometry
 npm run test:styles
 npm run test:media
+npm run test:media-references
 git diff --check
 ```
 

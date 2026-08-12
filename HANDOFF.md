@@ -1,75 +1,108 @@
 # Development handoff
 
-_Snapshot: August 11, 2026 · branch `main` · base commit `74f52fe` (`images, image library, and media storage settings`)_
+_Snapshot: August 12, 2026 · branch `main` · commit `cb40de8` (`image bug fixes`)_
 
 Read this file first when opening a new development session. `README.md` is the
-setup/status overview; `PLAN.md` is the full product and technical direction.
+setup/status overview; `PLAN.md` is the longer product and technical direction.
+Feature work through this checkpoint is committed and pushed to `main`.
 
 ## Current product state
 
 The local and Vercel applications are connected to Clerk, Neon, and Vercel
-Blob. A real user, test deck, saved library block, and reusable uploaded images
-exist. The core editing foundation is working:
+Blob. The core editor is now a credible working presentation tool rather than a
+prototype shell.
 
-- Dashboard, deck creation, slide add/duplicate/delete, and conflict-aware
-  autosave.
-- Design, Outline, and Voiceover tabs over one JSON block tree.
-- Named slide layouts with loss confirmation, plus insertable row, columns, and
-  group structures.
-- Drag/drop within and across containers, drag ghosting, insertion indicators,
-  visible move controls, and column swapping.
-- Collapsible Layout/Slide Design/Content/Library/Media palettes whose expanded
-  state is remembered locally. Slide Design appears only in Design view.
-- Design editor displays a labeled 16:9 boundary but lets overflowing blocks
-  remain visible and scrollable. Non-editor rendering stays clipped to 16:9.
-- Outline expands to natural document height and exposes content/structure only:
-  no surfaces, typography formatting, callout variants, or image frames.
-- Reusable block snapshots: save from block chrome, search/insert copies from the
-  palette, and rename/delete at `/library`.
-- Reusable media: upload by browse or file drop, assign existing media by drop,
-  delete assets, and choose/edit an image in a full-screen media modal with alt
-  text, decorative state, caption, and LU SVG frame.
-- Media can also be placed as floating slide objects or used as a full-slide
-  background with crop position and configurable readability overlay.
-- A provisional marketing-content inventory in `BLOCK-INVENTORY.md`, plus a
-  reusable horizontal/vertical process block and matching Timeline/Process
-  slide templates based on the available LU one-sheets.
-- Per-slide MP3/M4A/WAV upload and replacement, a shared keyboard-operable
-  player, Blob cleanup on replacement/deletion, manually timed caption cues,
-  and full-script import with client-side waveform pause alignment.
-- Internal present mode for draft and later-stage decks: shared slide/player
-  rendering, click/keyboard navigation, overview grid, persisted theme choice,
-  full-screen support, and reduced-motion handling.
-- Contrast-checked responsive surfaces, three light/dark responsive SVG slide
-  patterns without the old dimming scrim, and 18 LU image masks.
+### Editor workspace and slide navigation
 
-## Uncommitted working tree
+- Dashboard, deck creation, slide add/duplicate/delete, conflict-aware autosave,
+  and Design/Outline/Voiceover views over one JSON block tree are working.
+- The far-left resource column owns Add Slide, reusable blocks, and media. Layout
+  choices create new slides; the compact top add button repeats the last layout.
+- Current-slide layout switching is an intentional control above the slide
+  preview instead of sharing the Add Slide palette behavior.
+- The horizontal slide navigator supports large thumbnails, compact color/layout
+  summaries, and number-only pagination. The current slide preview feeds its
+  latest unsaved document into the navigator so thumbnails stay representative.
+- Resource, inspector, and slide-strip regions can be resized within safe bounds,
+  hidden, and restored. View settings live at the lower right of their panels.
+- The inspector is simplified to Content first and Slide Design second. Panels
+  and accordion state are remembered locally.
+- Design exposes a labeled 16:9 boundary while keeping editor overflow reachable;
+  present rendering remains clipped. Outline is natural-height and content-only.
+- Direct English text editing, nested block drag/drop, insertion indicators,
+  column swapping, reusable block snapshots, and library management are working.
 
-The process-block/template and Voiceover slices are uncommitted. Preserve
-`BLOCK-INVENTORY.md`, the related slide model/rendering/style changes, the audio
-policy and Voiceover work, and the present route/component/styles. Run
-`git status --short` for the authoritative list.
+### Media and image editing
 
-## Next development task
+- Media supports multi-file browse/drop upload, reusable selection, search,
+  preview, rename, reference-aware deletion, and presentation-scoped “replace
+  everywhere.” Renames migrate image and background references safely.
+- Clicking a media item opens the full viewer/editor rather than forcing edits
+  into the narrow palette. Images can be added as flow content, floating slide
+  objects, or slide backgrounds.
+- Image properties include alt/decorative state, caption, LU SVG frames, natural
+  aspect ratio, crop-to-fill/contain, focal X/Y, rotation, floating position,
+  proportional size, and background focal/overlay controls.
+- Floating images drag from either the photo or header, resize proportionally,
+  rotate, and remain clamped inside the slide. Positioning is free by default;
+  holding Shift while dragging intentionally snaps to slide edges/centers.
+- Native browser image dragging and inactive block-drop overlays no longer steal
+  the floating-image pointer interaction. A drag does not open the media picker.
+- Temporary on-canvas alignment and layer/reorder buttons were removed. Their
+  icons and placement were ambiguous, especially for front/back movement in a
+  z-axis. Basic labeled alignment remains in the media properties modal until a
+  consolidated properties-menu design is selected.
+- Editor tooltips render through the document body, so their viewport coordinates
+  remain correct even inside the contained/scaled slide editor.
 
-Marketing is still gathering representative slide decks. Reconcile
-`BLOCK-INVENTORY.md` when they arrive. The next independent application milestone
-is the status/review workflow followed by the public approved-deck route. Reuse
-the implemented `PresentDeck`, `SlideCanvas`, and `VoiceoverPlayer` for public
-rendering rather than introducing a separate presentation UI.
+### Slide rendering, narration, and presentation
 
-For later block additions, continue using thin vertical slices through:
+- Contrast-checked responsive surfaces, three light/dark SVG patterns without
+  the old dimming scrim, and 18 LU masks render consistently in editor/present.
+- A provisional collateral-backed inventory lives in `BLOCK-INVENTORY.md`; the
+  reusable process block and horizontal/vertical process templates are built.
+- Voiceover supports MP3/M4A/WAV upload/replacement, shared accessible playback,
+  manual cues, full-script import, and waveform-pause-assisted timing.
+- Internal present mode reuses the shared slide/player renderer and supports
+  click/keyboard navigation, overview, persisted theme, full screen, and reduced
+  motion.
 
-1. the shared `ContentNode` type and default-node factory;
-2. Design rendering and editor chrome;
-3. content-only Outline fields;
-4. block-library serialization/insertion;
-5. contrast/style checks where a block introduces new color combinations;
-6. future-safe non-editor rendering for present/public modes.
+## Product decisions intentionally pending
 
-UI rearrangement/polish is intentionally deferred until the block inventory is
-clear. After the template/block milestone, the planned sequence is Voiceover,
-then present/public publishing and DNS.
+- Updated wireframes will define a single design-software-style image properties
+  surface. It should consolidate alignment and layer actions with recognizable
+  horizontal/vertical alignment and z-order/stack semantics.
+- Do not reintroduce the temporary alignment strip or arrow-based front/back
+  controls before those mockups arrive.
+- Additional slide layouts and content blocks should be prioritized from the new
+  wireframes and representative marketing decks rather than guessed in isolation.
+- Floating images currently stay fully inside the slide. Deliberate off-canvas
+  placement, rotation-aware bounds, smart guides, grids, and multi-selection are
+  later refinements, not current regressions.
+
+## Recommended next sequence
+
+1. **Apply the updated wireframes.** Start with the consolidated image-properties
+   menu and the final alignment/layer interaction; then reconcile panel/chrome
+   details without changing the shared slide document model.
+2. **Finish the media refinement pass.** Validate crop/focal editing, layer order,
+   alignment, replacement, and background behavior together across light/dark and
+   several slide layouts. Keep free drag as the default and Shift as explicit snap.
+3. **Reconcile templates and blocks.** Audit the representative decks against
+   `BLOCK-INVENTORY.md`, then implement the highest-reuse layouts as thin vertical
+   slices through Design, Outline, library serialization, and present rendering.
+4. **Complete the MVP workflow.** Build `draft → in_review → approved`, then the
+   logged-out public approved-deck route and DNS. Reuse `PresentDeck`,
+   `SlideCanvas`, and `VoiceoverPlayer`; do not create a separate public renderer.
+5. **Run the end-to-end hardening pass.** Cover keyboard/accessibility behavior,
+   13-inch and 30-inch workspace sizes, save conflicts, media failures, present
+   mode, and logged-out public-route protection before launch.
+
+## Working tree checkpoint
+
+Application feature work was clean at `cb40de8` before this handoff update. If
+this wrap-up has not been committed, only the handoff/roadmap documentation
+should be new. Always use `git status --short` as the authoritative list.
 
 ## Local development safety
 
@@ -92,6 +125,9 @@ The last clean restart was ready in 923 ms; the editor's first compile took 2.7
 seconds and subsequent requests completed in roughly 331 ms. `.next` contains no
 source code, database records, or uploaded Blob media.
 
+For browser verification on this Mac, Google Chrome is installed at
+`/Applications/Web/Google Chrome.app` rather than directly under `/Applications`.
+
 ## Environment contract
 
 Required local values live in `.env.local` and must never be committed:
@@ -107,18 +143,22 @@ The app stores public image URLs under `media/`, permits JPG/PNG/WebP/GIF up to
 
 ## Verification baseline
 
-Most recent focused checks passed:
+Most recent focused and broad checks passed on August 12:
 
 ```bash
-npx tsc --noEmit
 npm run test:audio    # formats, 25 MB limit, prefix, package, env contract
 npm run test:captions # script splitting, waveform pause detection, cue timing
-npm run test:styles   # 63 readable pairs, 3 SVG themes, 18 masks
+npm run test:image-geometry # bounds, free placement, Shift snap, alignment, rotation
 npm run test:media    # formats, size, prefix, package, env contract
+npm run test:media-references # nested images and slide backgrounds migrate safely
+npm run test:styles   # 63 readable pairs, 3 SVG themes, 18 masks
+npx tsc --noEmit
 git diff --check
 ```
 
-Chrome verification also covers direct Design-mode text editing, SVG theme
-switching, floating/background image placement, new image layouts, and the
-full-script voiceover input. Run a production build only with the dev server
-stopped; the last isolated build passed on August 11.
+The August 12 production build passed. Chrome verification covers direct English
+text editing, SVG theme switching, the resized/hidden workspace, horizontal
+slide views, media management, background placement, image crop/focal controls,
+free floating-image drag, Shift snapping, resize/rotation, correctly positioned
+tooltips, and full-script voiceover input. The interaction test slide was restored
+after verification.
