@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * A real preview of a library block (LIBRARIES.md §4.2).
+ * A real preview of a library block (LIBRARIES.md §11).
  *
  * Two rules, and they are what tell the two reusable libraries apart at a
  * glance:
@@ -12,28 +12,32 @@
  *   - A **whole slide** previews as a slide, in its frame with its styling.
  *     That component is `SlidePreview` and lands with the slide library.
  *
- * Scaling is done with a CSS transform over a full-width render rather than by
- * shrinking font sizes, so relative type hierarchy inside the block survives.
+ * The preview shows the **whole block**, never a cropped window onto it. Blocks
+ * are genuinely different shapes and a fixed-height crop hides exactly the part
+ * you need to recognise. The card grid is masonry so variable heights pack
+ * instead of leaving holes.
+ *
+ * Scaling is a CSS transform over a full-width render rather than shrunken font
+ * sizes, so the relative type hierarchy inside the block survives.
  */
 import { useEffect, useRef, useState } from "react";
 import { BlockTree } from "@/components/SlideCanvas";
 import type { Node } from "@/lib/slides/types";
 
-/** Width the tree is rendered at before scaling. Roughly a slide's content
- *  column, so proportions match what the block looks like in a deck. */
+/** Width the tree renders at before scaling. Roughly a slide's content column,
+ *  so proportions match what the block looks like in a deck. */
 const RENDER_WIDTH = 880;
 
 export default function BlockPreview({
-  node, theme = "light", maxHeight = 180,
+  node, theme = "light",
 }: {
   node: Node;
   theme?: "light" | "dark";
-  maxHeight?: number;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0.3);
-  const [height, setHeight] = useState(maxHeight);
+  const [scale, setScale] = useState(0.34);
+  const [height, setHeight] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -44,17 +48,26 @@ export default function BlockPreview({
       if (!frame || !content) return;
       const next = frame.clientWidth / RENDER_WIDTH;
       setScale(next);
-      // Cap the frame so one very tall block cannot make a grid row enormous;
-      // the overflow is clipped and faded rather than scrolled.
-      setHeight(Math.min(maxHeight, Math.max(64, content.scrollHeight * next)));
+      // A transform does not affect layout, so the frame has to be told how
+      // tall the scaled content actually is. No cap: the whole block shows.
+      setHeight(content.scrollHeight * next);
     }
 
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(frame);
     observer.observe(content);
-    return () => observer.disconnect();
-  }, [maxHeight, node]);
+
+    // Images inside the block change scrollHeight after they decode, and a
+    // ResizeObserver on the wrapper does not always catch it.
+    const images = [...content.querySelectorAll("img")];
+    for (const image of images) image.addEventListener("load", measure);
+
+    return () => {
+      observer.disconnect();
+      for (const image of images) image.removeEventListener("load", measure);
+    };
+  }, [node]);
 
   return (
     <div
@@ -62,16 +75,14 @@ export default function BlockPreview({
       ref={frameRef}
       style={{ height }}
       data-theme={theme}
-      /* The name, type, and summary next to this are the accessible content.
-         A scaled-down visual duplicate would just be noise in a screen reader. */
+      /* The name, status, and tags beside this are the accessible content. A
+         scaled-down visual duplicate would just be noise in a screen reader. */
       aria-hidden="true"
     >
       <div
         className="lib-preview-content"
         ref={contentRef}
         style={{ width: RENDER_WIDTH, transform: `scale(${scale})` }}
-        /* inert isn't universally supported yet; this belt-and-braces stops any
-           control inside a preview from taking focus. */
         tabIndex={-1}
       >
         <BlockTree nodes={[node]} theme={theme} />

@@ -118,6 +118,33 @@ and detail headers match `.page-heading` rhythm, so the library no longer sits
 higher than the decks dashboard. The editor's save-to-library glyph is a
 bookmark; the star is now only ever a personal favorite.
 
+### Second refinement pass (Aug 12, evening)
+
+`npx tsc --noEmit` clean, eight test scripts passing.
+
+- **Drafts toggle flipped.** Off by default shows everything; switching it on
+  narrows to **Approved only**. URL param is `?approved=1`. The count badge
+  appears only while the switch is on, where it says how much is held back.
+- **Previews show the whole block.** No height cap, no crop fade. The frame is
+  sized from the scaled content, and an `img.onload` listener re-measures after
+  images decode.
+- **Grid view is masonry** (CSS multicol, `columns: 320px 4`). Column-major
+  visual order, DOM order unchanged — see `LIBRARIES.md` §11.
+- **Detail screen rebuilt full-bleed** (`.app-shell-wide`, 1800px) with a
+  preview band across the top and three columns under it: details left,
+  discussion centre and widest, approval/history/delete right. Collapses to two
+  columns at 1400px and one at 900px.
+- **Column overlap fixed.** The 880px preview render was forcing its container
+  wide; `min-width: 0` on `.lib-preview`, `.lib-panel`, and
+  `.lib-detail-preview` contains it.
+- **`BlockEditModal`** — the smart-object pop-out. Double-click the preview or
+  press Edit block. Reuses `SlideCanvas` with a real editor harness (text,
+  move, duplicate, delete, drag/drop, column swap, image geometry). Split save:
+  **Save changes** overwrites and bumps `version` via
+  `saveLibraryItemPayloadAction`; **Save as new version** is visible, disabled,
+  and explains itself. Media swapping is not wired in yet — see §12.
+- No duplicate action anywhere, on purpose. `LIBRARIES.md` §12 records why.
+
 ### Next
 
 `LIBRARIES.md` §9 step 5 — the media library on the shell, then companies (6),

@@ -249,6 +249,48 @@ export async function setLibraryItemTagsAction(
   }
 }
 
+/**
+ * Overwrites the block's payload from the pop-out editor and bumps its version
+ * (LIBRARIES.md §5.5). The version bump is what tells decks holding a linked
+ * copy that they are stale, without diffing JSON.
+ */
+export async function saveLibraryItemPayloadAction(
+  input: { id: string; node: unknown },
+): Promise<ManageLibraryResult> {
+  const gate = await guard([input.id], "library.edit");
+  if (!gate.ok) return { status: "error", message: gate.error };
+
+  const serialized = JSON.stringify(input.node);
+  if (!input.node || typeof input.node !== "object" || serialized.length > 200_000) {
+    return { status: "error", message: "This block cannot be saved because its content is invalid or too large." };
+  }
+
+  try {
+    const [existing] = await db.select({ locked: libraryItems.locked, version: libraryItems.version })
+      .from(libraryItems)
+      .where(and(eq(libraryItems.id, input.id), eq(libraryItems.kind, "block")))
+      .limit(1);
+    if (!existing) return { status: "error", message: "That block no longer exists." };
+    if (existing.locked) return { status: "error", message: "This block is locked. Unlock it before editing." };
+
+    await db.update(libraryItems)
+      .set({
+        payload: input.node,
+        version: existing.version + 1,
+        updatedBy: gate.userId,
+        updatedAt: new Date(),
+      })
+      .where(eq(libraryItems.id, input.id));
+
+    revalidatePath("/library");
+    revalidatePath(`/library/blocks/${input.id}`);
+    return { status: "complete", message: `Saved as version ${existing.version + 1}.` };
+  } catch (error) {
+    console.error("Failed to save library item payload", error);
+    return { status: "error", message: "That did not save. Your edits are still open — try again." };
+  }
+}
+
 export async function addCommentAction(
   input: { subjectId: string; body: string; parentId?: string },
 ): Promise<ManageLibraryResult> {

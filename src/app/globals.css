@@ -65,6 +65,8 @@ button, select { cursor: pointer; }
 }
 
 .app-shell-narrow { width: min(760px, calc(100% - (2 * var(--space-5)))); }
+/* Three-column screens need the room; 1180px squeezes them. */
+.app-shell-wide { width: min(1800px, calc(100% - (2 * var(--space-5)))); }
 
 .app-header {
   min-height: 88px;
@@ -538,7 +540,7 @@ button, select { cursor: pointer; }
 .lib-switch input:checked + .lib-switch-track > span { background: var(--text-on-accent); transform: translateX(16px); }
 .lib-switch input:focus-visible + .lib-switch-track { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 .lib-switch-label { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-primary); font: var(--text-caption); font-weight: 750; white-space: nowrap; }
-.lib-switch-count { padding: 0 6px; background: var(--bg-page); color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font-variant-numeric: tabular-nums; }
+.lib-switch-count { padding: 0 var(--space-2); background: var(--bg-page); color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font-variant-numeric: tabular-nums; }
 
 /* Combined filter panel — one trigger, all groups stacked inside. */
 .lib-filter { position: relative; flex: none; }
@@ -618,8 +620,14 @@ button, select { cursor: pointer; }
 .lib-tag.is-more { color: var(--text-secondary); }
 .lib-muted { color: var(--text-secondary); }
 
-.lib-block-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-5); }
-.lib-block-card { position: relative; display: grid; grid-template-rows: auto 1fr; min-width: 0; overflow: hidden; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+/* Masonry via multicol. Block previews are genuinely different heights and a
+   strict grid either crops them or leaves holes. Tradeoff accepted: multicol
+   fills column 1 top-to-bottom before column 2, so visual order is column-major
+   while DOM order (and therefore keyboard and screen-reader order) stays the
+   sorted order. For a browse-and-pick library that is the right trade. */
+.lib-block-grid { columns: 320px 4; column-gap: var(--space-5); }
+.lib-block-grid > * { break-inside: avoid; margin-bottom: var(--space-5); }
+.lib-block-card { position: relative; display: block; min-width: 0; overflow: hidden; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
 .lib-block-card[data-status="draft"] { border-style: dashed; border-color: var(--border-strong); }
 .lib-block-card[data-selected] { border-color: var(--accent-primary); border-style: solid; box-shadow: 0 0 0 2px var(--accent-primary); }
 .lib-block-select { position: absolute; z-index: 3; top: var(--space-3); left: var(--space-3); }
@@ -632,10 +640,11 @@ button, select { cursor: pointer; }
 /* A real render of the block, scaled — not a text stand-in. Blocks preview
    bare; whole slides preview in their 16:9 frame. That contrast is how the two
    reusable libraries tell themselves apart (LIBRARIES.md §4.2). */
-.lib-preview { position: relative; overflow: hidden; padding: var(--space-4); }
+/* The frame is sized to the scaled content, so the whole block shows — never a
+   cropped window onto it. min-width:0 keeps the 880px render from forcing its
+   container wide, which is what used to blow out the detail screen's columns. */
+.lib-preview { position: relative; min-width: 0; overflow: hidden; padding: var(--space-4); }
 .lib-preview-content { transform-origin: top left; pointer-events: none; }
-/* Fade the clip so a tall block reads as continuing rather than as cut off. */
-.lib-preview::after { content: ""; position: absolute; inset-inline: 0; bottom: 0; height: var(--space-6); background: linear-gradient(to bottom, transparent, var(--bg-page)); pointer-events: none; }
 
 .lib-block-body { display: grid; align-content: start; gap: var(--space-2); padding: var(--space-4); }
 .lib-block-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
@@ -689,20 +698,56 @@ body.is-resizing-column { cursor: col-resize; user-select: none; }
 .lib-modal fieldset em { margin-left: auto; color: var(--text-secondary); font: var(--text-caption); font-style: normal; }
 .lib-modal-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-5); }
 
+
+/* --- Pop-out block editor (LIBRARIES.md §5.5) -------------------------
+   The "smart object" surface: a library block opened in the same canvas a deck
+   uses, saving back to the source rather than to any one slide. */
+.lib-editor-backdrop { position: fixed; z-index: 70; inset: 0; display: grid; place-items: center; padding: var(--space-5); background: hsl(var(--shadow-color) / 0.65); }
+.lib-editor { display: grid; grid-template-rows: auto auto 1fr auto; width: min(1400px, 100%); max-height: calc(100vh - (2 * var(--space-5))); overflow: hidden; background: var(--bg-page); border: 1px solid var(--border-strong); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.lib-editor:focus { outline: none; }
+.lib-editor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-5); padding: var(--space-5); background: var(--bg-surface); border-bottom: 1px solid var(--border-default); }
+.lib-editor-head h2 { margin-top: var(--space-1); font: var(--text-h2); }
+/* Name the blast radius before anyone saves. */
+.lib-editor-blast { margin: var(--space-2) 0 0; color: var(--text-secondary); font: var(--text-caption); }
+.lib-editor-actions { display: flex; flex: none; align-items: center; gap: var(--space-2); }
+.lib-editor-error { margin: 0; padding: var(--space-3) var(--space-5); background: var(--bg-accent-soft); color: var(--text-primary); border-bottom: 1px solid var(--border-default); font: var(--text-body-sm); }
+.lib-editor-canvas { overflow: auto; padding: var(--space-6); }
+.lib-editor-note { margin: 0; padding: var(--space-3) var(--space-5); background: var(--bg-surface); color: var(--text-secondary); border-top: 1px solid var(--border-default); font: var(--text-caption); }
+
+/* Split button — primary action plus the menu where versioning lives. */
+.lib-split { position: relative; display: inline-flex; }
+.lib-split > .button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.lib-split-toggle { min-width: 38px; padding-inline: var(--space-2); border-left: 1px solid hsl(var(--shadow-color) / 0.25); border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.lib-split > .button[data-disabled] { cursor: not-allowed; opacity: 0.55; }
+.lib-split-menu { position: absolute; z-index: 10; top: calc(100% + var(--space-2)); right: 0; display: grid; gap: var(--space-1); width: 340px; padding: var(--space-2); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); text-align: left; }
+.lib-split-item { display: grid; gap: var(--space-1); padding: var(--space-3); background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--text-primary); text-align: left; }
+.lib-split-item strong { font: var(--text-body-sm); font-weight: 800; }
+.lib-split-item span { color: var(--text-secondary); font: var(--text-caption); line-height: 1.5; }
+button.lib-split-item:hover:not([data-disabled]) { background: var(--bg-surface-raised); }
+button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
+/* Visible and explained rather than hidden: people only reach for versions if
+   they can see that versions are where this is going. */
+.lib-split-item.is-soon { border: 1px dashed var(--border-strong); opacity: 0.75; }
+.lib-split-item.is-soon input { width: 100%; min-height: 34px; margin-top: var(--space-1); padding: 0 var(--space-2); background: var(--bg-page); color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-caption); cursor: not-allowed; }
+.lib-split-item.is-soon em { color: var(--status-warning); font: var(--text-caption); font-style: normal; font-weight: 750; }
+
 /* --- Single-item detail screen (LIBRARIES.md §4.2) -------------------- */
 .lib-detail { display: grid; gap: var(--space-5); }
 .lib-detail-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-5); margin-top: calc(var(--space-5) * -1); padding-top: var(--space-3); }
 .lib-detail-header h1 { font: var(--text-display-md); overflow-wrap: anywhere; }
 .lib-detail-sub { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-3) 0 0; color: var(--text-secondary); font: var(--text-caption); }
-.lib-detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; align-items: start; gap: var(--space-5); }
-.lib-detail-main, .lib-detail-side { display: grid; gap: var(--space-5); min-width: 0; }
+/* Details left, discussion centre and widest (it is the part that grows),
+   approval + history + delete right. */
+.lib-detail-grid { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.6fr) minmax(280px, 1fr); align-items: start; gap: var(--space-5); }
+.lib-detail-col { display: grid; align-content: start; gap: var(--space-5); min-width: 0; }
+.lib-preview-band { min-width: 0; }
 
-.lib-panel { padding: var(--space-5); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+.lib-panel { min-width: 0; padding: var(--space-5); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
 .lib-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
 .lib-panel h2 { font: var(--text-h3); }
 .lib-panel-note { margin: var(--space-3) 0 0; color: var(--text-secondary); font: var(--text-caption); line-height: 1.5; }
 .lib-panel-head .lib-panel-note { margin: 0; }
-.lib-detail-preview { background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+.lib-detail-preview { min-width: 0; overflow: hidden; cursor: zoom-in; background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
 /* Delete gets its own bordered region at the end of the page rather than a
    button on a card you are scanning quickly. */
 .lib-panel.is-danger-zone { border-color: var(--status-danger); }
@@ -748,8 +793,14 @@ body.is-resizing-column { cursor: col-resize; user-select: none; }
 .lib-avatar { display: grid; place-items: center; width: 26px; height: 26px; background: var(--bg-accent-soft); color: var(--accent-primary); border-radius: 50%; font: var(--text-caption); font-weight: 800; }
 .lib-comment-reply { margin-top: var(--space-2); padding: var(--space-1) 0; background: transparent; color: var(--accent-primary); border: 0; font: var(--text-caption); font-weight: 750; }
 
+@media (max-width: 1400px) {
+  /* Discussion drops under details and approval rather than getting squeezed. */
+  .lib-detail-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .lib-detail-col.is-wide { grid-column: 1 / -1; order: 3; }
+}
 @media (max-width: 900px) {
   .lib-detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .lib-detail-col.is-wide { grid-column: auto; }
 }
 
 /* --- Reusable content library ----------------------------------- */

@@ -4,22 +4,33 @@
  * The single-item edit screen (LIBRARIES.md §4.2).
  *
  * A route rather than an inline editor, deliberately: it is linkable ("Jim, can
- * you approve this: <url>"), which is exactly what the approval workflow needs,
- * and it gives the discussion, approval, and tagging the room they will need as
- * the team grows.
+ * you approve this: <url>"), which is exactly what the approval workflow needs.
  *
- * Delete lives at the bottom of the page in its own bordered region, not on the
- * card in the grid. Moving it here is most of what stops accidental deletion.
+ * Full-bleed and three columns on a wide screen — details left, discussion
+ * centre and widest because it is the part that grows, approval and history
+ * right. The preview is its own band across the top: block previews are
+ * variable-height by design and a column would either crop them or leave the
+ * other columns short.
+ *
+ * Delete sits at the end of the right rail in its own bordered region, not on
+ * the grid card. Moving it here is most of what stops accidental deletion.
+ *
+ * There is deliberately **no "duplicate this block"**. Duplicating forks a new
+ * parent and orphans the discussion, approval, and history that make a library
+ * item trustworthy. Versions are the intended path, which is why the pop-out
+ * editor puts "Save as new version" next to "Save changes".
  */
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import BlockPreview from "./BlockPreview";
+import BlockEditModal from "./BlockEditModal";
 import type { LibraryBlockItem } from "@/lib/data/library";
 import type { CommentNode } from "@/lib/data/comments";
+import type { Node } from "@/lib/slides/types";
 import {
-  addCommentAction, deleteLibraryItemsAction, setLibraryItemTagsAction,
-  setLibraryStatusAction, updateLibraryItemAction,
+  addCommentAction, deleteLibraryItemsAction, saveLibraryItemPayloadAction,
+  setLibraryItemTagsAction, setLibraryStatusAction, updateLibraryItemAction,
 } from "@/app/library/actions";
 
 const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
@@ -40,6 +51,7 @@ export default function BlockDetail({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [notice, setNotice] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
 
   const [name, setName] = useState(item.name);
   const [description, setDescription] = useState(item.description ?? "");
@@ -59,6 +71,16 @@ export default function BlockDetail({
       setNotice(result.message ?? (result.status === "error" ? "Something went wrong." : fallback));
       if (result.status === "complete") router.refresh();
     });
+  }
+
+  async function savePayload(node: Node) {
+    const result = await saveLibraryItemPayloadAction({ id: item.id, node });
+    if (result.status === "complete") {
+      setNotice(result.message ?? "Saved.");
+      setEditorOpen(false);
+      router.refresh();
+    }
+    return result;
   }
 
   return (
@@ -91,24 +113,35 @@ export default function BlockDetail({
 
       {notice && <p className="library-status" role="status">{notice}</p>}
 
-      <div className="lib-detail-grid">
-        <div className="lib-detail-main">
-          <section className="lib-panel" aria-labelledby="preview-heading">
-            <div className="lib-panel-head">
-              <h2 id="preview-heading">Preview</h2>
-              {/* Version/variation switching is LIBRARIES.md §5.3 (v2). Hidden
-                  rather than shown-disabled: a control people can never enable
-                  is noise. The markup lands with the variant schema. */}
-            </div>
-            <div className="lib-detail-preview">
-              <BlockPreview node={item.node} maxHeight={360} />
-            </div>
-            <p className="lib-panel-note">
-              Blocks preview as themselves, without slide styling — that is how a
-              block differs from a whole slide in the slide library.
-            </p>
-          </section>
+      {/* Preview band. Full width because block heights vary wildly and the
+          whole block should always be visible (LIBRARIES.md §11). */}
+      <section className="lib-panel lib-preview-band" aria-labelledby="preview-heading">
+        <div className="lib-panel-head">
+          <h2 id="preview-heading">Preview</h2>
+          <button type="button" className="button button-secondary" onClick={() => setEditorOpen(true)}>
+            Edit block
+          </button>
+        </div>
 
+        {/* Double-click opens the source, the way a smart object does. The
+            button above is the discoverable path; this is the fast one. */}
+        <div
+          className="lib-detail-preview"
+          onDoubleClick={() => setEditorOpen(true)}
+          title="Double-click to edit this block"
+        >
+          <BlockPreview node={item.node} />
+        </div>
+
+        <p className="lib-panel-note">
+          Blocks preview as themselves, without slide styling — that is how a
+          block differs from a whole slide in the slide library. Double-click the
+          preview to edit the source.
+        </p>
+      </section>
+
+      <div className="lib-detail-grid">
+        <div className="lib-detail-col">
           <section className="lib-panel" aria-labelledby="details-heading">
             <div className="lib-panel-head"><h2 id="details-heading">Details</h2></div>
             <form
@@ -124,10 +157,8 @@ export default function BlockDetail({
               </label>
               <label className="field">
                 <span>Description <em>Optional — what this is for, and when to use it</em></span>
-                <textarea
-                  value={description} maxLength={500} rows={3}
-                  onChange={(event) => setDescription(event.target.value)}
-                />
+                <textarea value={description} maxLength={500} rows={3}
+                  onChange={(event) => setDescription(event.target.value)} />
               </label>
               <div className="lib-form-actions">
                 <button type="submit" className="button button-primary"
@@ -146,30 +177,25 @@ export default function BlockDetail({
               onSubmit={(event) => {
                 event.preventDefault();
                 run(() => setLibraryItemTagsAction({
-                  id: item.id,
-                  categoryName: category,
+                  id: item.id, categoryName: category,
                   tagNames: tagText.split(",").map((value) => value.trim()).filter(Boolean),
                 }), "Tags updated.");
               }}
             >
               <label className="field">
                 <span>Category <em>One per block — the &ldquo;what kind of thing is this&rdquo; axis</em></span>
-                <input
-                  value={category} list="category-suggestions" maxLength={60}
+                <input value={category} list="category-suggestions" maxLength={60}
                   placeholder="Intro, Case study, Pricing…"
-                  onChange={(event) => setCategory(event.target.value)}
-                />
+                  onChange={(event) => setCategory(event.target.value)} />
                 <datalist id="category-suggestions">
                   {categorySuggestions.map((entry) => <option key={entry} value={entry} />)}
                 </datalist>
               </label>
               <label className="field">
                 <span>Tags <em>Comma separated. Industry, tone, campaign — whatever helps you find it</em></span>
-                <input
-                  value={tagText} list="tag-suggestions" maxLength={400}
+                <input value={tagText} list="tag-suggestions" maxLength={400}
                   placeholder="hospitality, loyalty, q4"
-                  onChange={(event) => setTagText(event.target.value)}
-                />
+                  onChange={(event) => setTagText(event.target.value)} />
                 <datalist id="tag-suggestions">
                   {tagSuggestions.map((entry) => <option key={entry} value={entry} />)}
                 </datalist>
@@ -183,13 +209,14 @@ export default function BlockDetail({
               </div>
             </form>
           </section>
+        </div>
 
+        {/* Centre and widest: the discussion is the part that grows. */}
+        <div className="lib-detail-col is-wide">
           <section className="lib-panel" aria-labelledby="discussion-heading">
             <div className="lib-panel-head">
               <h2 id="discussion-heading">Discussion</h2>
-              <p className="lib-panel-note">
-                Comments live with the block, not with any one deck that uses it.
-              </p>
+              <p className="lib-panel-note">Comments live with the block, not with any one deck.</p>
             </div>
 
             <form
@@ -205,11 +232,9 @@ export default function BlockDetail({
             >
               <label>
                 <span className="sr-only">Add a comment</span>
-                <textarea
-                  rows={3} value={commentBody} maxLength={4000}
+                <textarea rows={3} value={commentBody} maxLength={4000}
                   placeholder="Ask a question, suggest a change, or note why this wording was chosen…"
-                  onChange={(event) => setCommentBody(event.target.value)}
-                />
+                  onChange={(event) => setCommentBody(event.target.value)} />
               </label>
               <button type="submit" className="button button-primary"
                 aria-disabled={!commentBody.trim() || isPending}
@@ -270,7 +295,7 @@ export default function BlockDetail({
           </section>
         </div>
 
-        <aside className="lib-detail-side">
+        <div className="lib-detail-col">
           <section className="lib-panel" aria-labelledby="approval-heading">
             <div className="lib-panel-head"><h2 id="approval-heading">Approval</h2></div>
             <div className="lib-approval">
@@ -315,9 +340,6 @@ export default function BlockDetail({
             </dl>
           </section>
 
-          {/* Away from everything else, in its own bordered region, at the end
-              of the page. Moving delete off the grid card is most of what stops
-              it being hit by accident. */}
           <section className="lib-panel is-danger-zone" aria-labelledby="danger-heading">
             <div className="lib-panel-head"><h2 id="danger-heading">Delete this block</h2></div>
             <p className="lib-panel-note">
@@ -342,8 +364,19 @@ export default function BlockDetail({
               Delete block
             </button>
           </section>
-        </aside>
+        </div>
       </div>
+
+      {editorOpen && (
+        <BlockEditModal
+          name={item.name}
+          version={item.version}
+          node={item.node}
+          usageCount={item.usageCount}
+          onCancel={() => setEditorOpen(false)}
+          onSave={savePayload}
+        />
+      )}
     </div>
   );
 }

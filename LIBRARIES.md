@@ -657,3 +657,37 @@ visual duplicate would just be noise in a screen reader.
 Version and variation switching on a preview is designed (a dropdown above the
 preview selecting parent/variant) but **hidden until the variant schema is
 live** — a control nobody can ever use is noise.
+
+Grid view is **masonry** (CSS multicol), because blocks are genuinely different
+heights and a strict grid either crops them or leaves holes. The tradeoff:
+multicol fills column 1 top-to-bottom before column 2, so visual order is
+column-major while DOM order — and therefore keyboard and screen-reader order —
+stays the sorted order. For a browse-and-pick library that is the right trade.
+
+---
+
+## 12. Editing a library block
+
+A library block is a **source object**, edited the way a Photoshop smart object
+is: double-click the preview (or press **Edit block**) and it pops out into the
+same canvas a deck uses, with the same chrome and the same interactions. Saving
+pushes back to the library. You never edit a library block by accident, and you
+never have to open a deck to edit one.
+
+The save control is a **split button**, and that shape is the whole point:
+
+| | Behavior |
+|---|---|
+| **Save changes** | Overwrites the source and bumps `version`. Everything linked picks it up. The header names the blast radius first — "Saving updates this block in 6 decks." |
+| **Save as new version** | Forks a named variant under this parent. **v2** — needs the variant schema. Ships now as a visible, disabled item with its naming field, because people only reach for versions if they can see that versions are where this is going. |
+
+**There is deliberately no "duplicate this block."** Duplicating forks a new
+parent and orphans the discussion, approval history, and usage that make a
+library item trustworthy — it is the single fastest way to end up with eleven
+near-identical blocks and no idea which is current. Versions are the intended
+path. If a duplicate escape hatch is ever added it belongs in the library grid,
+not on the item's own screen, and it should be less prominent than versioning.
+
+Media assignment is not wired into the pop-out yet: the media picker is a
+deck-scoped surface today. Image geometry (position, crop, focal point,
+rotation) is editable; swapping the image itself is done in a deck for now.

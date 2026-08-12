@@ -31,15 +31,16 @@ export type FilterDef<T> = {
 /**
  * The one filter promoted out of the panel and onto the toolbar as a switch.
  *
- * Approved content is always visible; this only ever *adds* unapproved items to
- * the view. Framing it as "show drafts" rather than a status multi-select means
- * a salesperson cannot accidentally filter themselves into a draft-only list
- * and ship from it (LIBRARIES.md §4.2).
+ * Off by default and everything is visible — the library's job is to show you
+ * what exists. Switching it on *narrows* to approved only. Framing it as a
+ * subtractive switch rather than a status multi-select means the toggle only
+ * ever has one effect, and there is no combination of controls that produces a
+ * draft-only list someone could ship from (LIBRARIES.md §4.2).
  */
 export type DraftToggleDef<T> = {
   label: string;
   hint?: string;
-  /** True when the item is unapproved and should be hidden unless toggled on. */
+  /** True when the item is unapproved, and so hidden while the switch is on. */
   isDraft: (item: T) => boolean;
   draftCount: number;
 };

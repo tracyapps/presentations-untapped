@@ -21,7 +21,9 @@ export default async function BlockDetailPage({ params }: { params: Promise<{ id
   ]);
 
   return (
-    <main className="app-shell">
+    /* Full-bleed: three columns need the room, and the preview band reads badly
+       squeezed into the 1180px content width. */
+    <main className="app-shell app-shell-wide">
       <AppHeader />
       <BlockDetail
         item={item}

@@ -273,7 +273,7 @@ export default function BlockLibrary({
         breadcrumbs={[{ label: "Decks", href: "/decks" }, { label: "Content blocks" }]}
         notice={notice}
         title="Content blocks"
-        description="Reusable groups of content. Approved blocks are always visible; drafts stay hidden until you ask for them."
+        description="Reusable groups of content. Everything shows by default; switch to approved only when you are building something a client will see."
         items={items}
         storageKey="blocks"
         searchText={(item) => [
@@ -284,7 +284,7 @@ export default function BlockLibrary({
         views={["grid", "list"]}
         filters={filters}
         draftToggle={{
-          label: "Show drafts",
+          label: "Approved only",
           isDraft: (item) => item.status !== "approved",
           draftCount: items.filter((item) => item.status !== "approved").length,
         }}
@@ -301,7 +301,7 @@ export default function BlockLibrary({
         }}
         noResultsState={{
           heading: "No blocks match those filters",
-          body: "Try a different search or clear the filters. If you are hunting for something unapproved, switch on “Show drafts”.",
+          body: "Try a different search or clear the filters. If “Approved only” is on, switching it off will show drafts too.",
         }}
         renderView={(mode, visible, selection) =>
           mode === "grid" ? (

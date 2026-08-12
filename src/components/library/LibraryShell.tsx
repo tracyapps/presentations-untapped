@@ -55,7 +55,7 @@ export default function LibraryShell<T extends { id: string }>({
 
   const query = params.get("q") ?? "";
   const page = Math.max(1, Number(params.get("page") ?? 1) || 1);
-  const showDrafts = params.get("drafts") === "1";
+  const hideDrafts = params.get("approved") === "1";
 
   const activeFilters = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -116,8 +116,8 @@ export default function LibraryShell<T extends { id: string }>({
     const needle = query.trim().toLowerCase();
     let result = items;
 
-    // Approved content is always in view; the switch only ever adds drafts.
-    if (draftToggle && !showDrafts) result = result.filter((item) => !draftToggle.isDraft(item));
+    // Everything shows by default; the switch narrows to approved only.
+    if (draftToggle && hideDrafts) result = result.filter((item) => !draftToggle.isDraft(item));
 
     if (needle) result = result.filter((item) => searchText(item).toLowerCase().includes(needle));
 
@@ -131,7 +131,7 @@ export default function LibraryShell<T extends { id: string }>({
 
     const sort = sorts.find((entry) => entry.id === sortId) ?? sorts[0];
     return sort ? [...result].sort(sort.compare) : result;
-  }, [items, query, searchText, filters, activeFilters, sorts, sortId, draftToggle, showDrafts]);
+  }, [items, query, searchText, filters, activeFilters, sorts, sortId, draftToggle, hideDrafts]);
 
   const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(filteredItems.length / pageSize)) : 1;
   const currentPage = Math.min(page, totalPages);
@@ -154,8 +154,8 @@ export default function LibraryShell<T extends { id: string }>({
         if (searchInputRef.current) searchInputRef.current.value = "";
       } });
     }
-    if (draftToggle && showDrafts) {
-      pills.push({ key: "drafts", label: "Including drafts", remove: () => setParams({ drafts: null, page: null }) });
+    if (draftToggle && hideDrafts) {
+      pills.push({ key: "approved", label: "Approved only", remove: () => setParams({ approved: null, page: null }) });
     }
     for (const filter of filters) {
       for (const value of activeFilters.get(filter.id) ?? []) {
@@ -171,10 +171,10 @@ export default function LibraryShell<T extends { id: string }>({
       }
     }
     return pills;
-  }, [query, filters, activeFilters, draftToggle, showDrafts, setParams]);
+  }, [query, filters, activeFilters, draftToggle, hideDrafts, setParams]);
 
   function clearAll() {
-    const cleared: Record<string, string | null> = { q: null, page: null, drafts: null };
+    const cleared: Record<string, string | null> = { q: null, page: null, approved: null };
     for (const filter of filters) cleared[filter.id] = null;
     setParams(cleared);
     if (searchInputRef.current) searchInputRef.current.value = "";
@@ -363,19 +363,25 @@ export default function LibraryShell<T extends { id: string }>({
         </label>
 
         {draftToggle && (
-          /* A switch, not a status multi-select: approved is always visible and
-             this only ever adds drafts, so nobody can filter themselves into a
-             draft-only list and ship from it (LIBRARIES.md §4.2). */
+          /* Subtractive switch: off shows everything, on narrows to approved.
+             One control, one effect, and no combination produces a draft-only
+             list someone could ship from (LIBRARIES.md §4.2). */
           <label className="lib-switch">
             <input
-              type="checkbox" role="switch" checked={showDrafts}
-              onChange={(event) => setParams({ drafts: event.target.checked ? "1" : null, page: null })}
+              type="checkbox" role="switch" checked={hideDrafts}
+              onChange={(event) => setParams({ approved: event.target.checked ? "1" : null, page: null })}
             />
             <span className="lib-switch-track" aria-hidden="true"><span /></span>
             <span className="lib-switch-label">
               {draftToggle.label}
-              {draftToggle.draftCount > 0 && (
-                <span className="lib-switch-count" aria-hidden="true">{draftToggle.draftCount}</span>
+              {/* The count only means something once the switch is on, where it
+                  says how much is being held back. Off, everything is showing
+                  and a number there would just be a puzzle. */}
+              {hideDrafts && draftToggle.draftCount > 0 && (
+                <>
+                  <span className="lib-switch-count" aria-hidden="true">{draftToggle.draftCount} hidden</span>
+                  <span className="sr-only">, hiding {draftToggle.draftCount} unapproved</span>
+                </>
               )}
             </span>
           </label>
