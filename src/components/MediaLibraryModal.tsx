@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ImageFramePicker from "@/components/ImageFramePicker";
 import MediaLibraryPanel from "@/components/MediaLibraryPanel";
 import type { MediaAsset } from "@/lib/data/media";
+import { alignFloatingImage, clampFloatingImage, imageAspectRatio, type ImageAlignment } from "@/lib/image-geometry";
 import { frameByKey } from "@/lib/slides/styles";
 import type { ContentNode, ContentProps } from "@/lib/slides/types";
 
@@ -20,6 +21,7 @@ type MediaLibraryModalProps = {
   onUploaded: (asset: MediaAsset) => void;
   onDelete: (asset: MediaAsset) => Promise<boolean>;
   onRename: (asset: MediaAsset, name: string) => Promise<{ asset: MediaAsset; message: string }>;
+  onReplaceEverywhere: (source: MediaAsset, target: MediaAsset) => Promise<{ message: string }>;
   onApply: (id: string, props: ContentProps["image"]) => void;
   onAddFloating: (asset: MediaAsset) => void;
   onUseAsBackground: (asset: MediaAsset) => void;
@@ -29,11 +31,12 @@ function defaultAlt(asset: MediaAsset): string {
   return asset.name.replace(/\.[^.]+$/, "").replaceAll("-", " ");
 }
 
-export default function MediaLibraryModal({ open, image, initialAsset, items, configured, loadError, onClose, onUploaded, onDelete, onRename, onApply, onAddFloating, onUseAsBackground }: MediaLibraryModalProps) {
+export default function MediaLibraryModal({ open, image, initialAsset, items, configured, loadError, onClose, onUploaded, onDelete, onRename, onReplaceEverywhere, onApply, onAddFloating, onUseAsBackground }: MediaLibraryModalProps) {
   const [draft, setDraft] = useState<ContentProps["image"]>({ src: "", alt: "" });
   const [renameValue, setRenameValue] = useState("");
   const [renameMessage, setRenameMessage] = useState("");
   const [isRenaming, setIsRenaming] = useState(false);
+  const [isReplacing, setIsReplacing] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -61,6 +64,7 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
   }, [open, onClose]);
 
   const selectedAsset = useMemo(() => items.find((item) => item.url === draft.src), [draft.src, items]);
+  const sourceAsset = useMemo(() => items.find((item) => item.url === image?.props.src), [image?.props.src, items]);
   const selectedExtension = selectedAsset?.name.match(/(\.[a-z0-9]{2,5})$/i)?.[1] ?? "";
   useEffect(() => {
     setRenameValue(selectedAsset?.name.replace(/\.[a-z0-9]{2,5}$/i, "") ?? "");
@@ -73,6 +77,22 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
 
   function selectAsset(asset: MediaAsset) {
     setDraft((current) => ({ ...current, src: asset.url, alt: current.alt || defaultAlt(asset) }));
+    const probe = new Image();
+    probe.onload = () => {
+      if (!probe.naturalWidth || !probe.naturalHeight) return;
+      setDraft((current) => current.src === asset.url
+        ? { ...current, aspectRatio: imageAspectRatio(probe.naturalWidth / probe.naturalHeight) }
+        : current);
+    };
+    probe.src = asset.url;
+  }
+
+  function updateFloating(update: Partial<ContentProps["image"]>) {
+    setDraft((current) => clampFloatingImage({ ...current, ...update, placement: "floating" }));
+  }
+
+  function alignImage(alignment: ImageAlignment) {
+    setDraft((current) => alignFloatingImage(current, alignment));
   }
 
   async function renameAsset(event: React.FormEvent<HTMLFormElement>) {
@@ -95,6 +115,21 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
     const deleted = await onDelete(asset);
     if (deleted) setDraft((current) => current.src === asset.url ? { ...current, src: "" } : current);
     return deleted;
+  }
+
+  async function replaceEverywhere() {
+    if (!sourceAsset || !selectedAsset || sourceAsset.url === selectedAsset.url || isReplacing) return;
+    if (!window.confirm(`Replace every use of “${sourceAsset.name}” with “${selectedAsset.name}” across this presentation? The original file will stay in the media library.`)) return;
+    setIsReplacing(true);
+    setRenameMessage("");
+    try {
+      const result = await onReplaceEverywhere(sourceAsset, selectedAsset);
+      setRenameMessage(result.message);
+    } catch (error) {
+      setRenameMessage(error instanceof Error ? error.message : "The image could not be replaced everywhere.");
+    } finally {
+      setIsReplacing(false);
+    }
   }
 
   return (
@@ -122,7 +157,7 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
               {draft.src ? <>
                 {/* Blob and manually hosted image URLs are both supported. */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className={frame ? "has-frame" : ""} style={frameStyle} src={draft.src} alt="" />
+                <img className={frame ? "has-frame" : ""} style={{ ...frameStyle, objectFit: draft.fit ?? "cover", objectPosition: `${draft.focalX ?? 50}% ${draft.focalY ?? 50}%`, transform: `rotate(${draft.rotation ?? 0}deg)` }} src={draft.src} alt="" />
                 {draft.caption && <p>{draft.caption}</p>}
               </> : <span>No image selected</span>}
             </div>
@@ -132,19 +167,30 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
                 <label><span>Media name</span><span className="media-name-field"><input type="text" maxLength={90} required value={renameValue} onChange={(event) => setRenameValue(event.target.value)} /><i>{selectedExtension}</i></span></label>
                 <button className="button button-secondary" type="submit" disabled={isRenaming || !renameValue.trim()}>{isRenaming ? "Renaming…" : "Rename"}</button>
               </form>
-              {renameMessage && <p className={`media-rename-message${renameMessage.startsWith("Renamed") ? " is-success" : ""}`} role="status">{renameMessage}</p>}
+              {renameMessage && <p className={`media-rename-message${renameMessage.startsWith("Renamed") || renameMessage.startsWith("Replaced") ? " is-success" : ""}`} role="status">{renameMessage}</p>}
             </>}
             {image && <>
               <label>Image URL<input type="url" value={draft.src} onChange={(event) => setDraft((current) => ({ ...current, src: event.target.value }))} placeholder="https://…" /></label>
               <label>Alt text<input type="text" value={draft.alt} disabled={draft.decorative} onChange={(event) => setDraft((current) => ({ ...current, alt: event.target.value }))} /></label>
               <label className="outline-check"><input type="checkbox" checked={draft.decorative ?? false} onChange={(event) => setDraft((current) => ({ ...current, decorative: event.target.checked }))} />Decorative image</label>
               <label>Caption<textarea rows={3} value={draft.caption ?? ""} onChange={(event) => setDraft((current) => ({ ...current, caption: event.target.value }))} placeholder="Optional caption shown below the image" /></label>
-              <label className="outline-check"><input type="checkbox" checked={draft.placement === "floating"} onChange={(event) => setDraft((current) => ({ ...current, placement: event.target.checked ? "floating" : "flow", x: current.x ?? 60, y: current.y ?? 18, width: current.width ?? 30 }))} />Float image on slide</label>
+              <div className="image-crop-controls">
+                <label>Image fit<select value={draft.fit ?? "cover"} onChange={(event) => setDraft((current) => ({ ...current, fit: event.target.value as "cover" | "contain" }))}><option value="cover">Crop to fill</option><option value="contain">Show whole image</option></select></label>
+                <label>Focal point X <input type="range" min={0} max={100} step={1} value={draft.focalX ?? 50} onChange={(event) => setDraft((current) => ({ ...current, focalX: Number(event.target.value) }))} /></label>
+                <label>Focal point Y <input type="range" min={0} max={100} step={1} value={draft.focalY ?? 50} onChange={(event) => setDraft((current) => ({ ...current, focalY: Number(event.target.value) }))} /></label>
+                <label>Rotation <span className="range-with-value"><input type="range" min={-180} max={180} step={1} value={draft.rotation ?? 0} onChange={(event) => setDraft((current) => ({ ...current, rotation: Number(event.target.value) }))} /><output>{Math.round(draft.rotation ?? 0)}°</output></span></label>
+              </div>
+              <label className="outline-check"><input type="checkbox" checked={draft.placement === "floating"} onChange={(event) => setDraft((current) => event.target.checked ? clampFloatingImage({ ...current, placement: "floating" }) : { ...current, placement: "flow" })} />Float image on slide</label>
             </>}
             {image && draft.placement === "floating" && <div className="floating-image-controls">
-              <label>Horizontal <input type="range" min={0} max={88} step={1} value={draft.x ?? 60} onChange={(event) => setDraft((current) => ({ ...current, x: Number(event.target.value) }))} /></label>
-              <label>Vertical <input type="range" min={0} max={82} step={1} value={draft.y ?? 18} onChange={(event) => setDraft((current) => ({ ...current, y: Number(event.target.value) }))} /></label>
-              <label>Width <input type="range" min={12} max={100} step={1} value={draft.width ?? 30} onChange={(event) => setDraft((current) => ({ ...current, width: Number(event.target.value) }))} /></label>
+              <strong>Position and size</strong>
+              <label>Horizontal <input type="range" min={0} max={100} step={1} value={draft.x ?? 60} onChange={(event) => updateFloating({ x: Number(event.target.value) })} /></label>
+              <label>Vertical <input type="range" min={0} max={100} step={1} value={draft.y ?? 18} onChange={(event) => updateFloating({ y: Number(event.target.value) })} /></label>
+              <label>Width <input type="range" min={12} max={100} step={1} value={draft.width ?? 30} onChange={(event) => updateFloating({ width: Number(event.target.value) })} /></label>
+              <div className="image-align-grid" role="group" aria-label="Align image on slide">
+                <button type="button" onClick={() => alignImage("left")}>Left</button><button type="button" onClick={() => alignImage("center-x")}>Center H</button><button type="button" onClick={() => alignImage("right")}>Right</button>
+                <button type="button" onClick={() => alignImage("top")}>Top</button><button type="button" onClick={() => alignImage("center-y")}>Center V</button><button type="button" onClick={() => alignImage("bottom")}>Bottom</button>
+              </div>
             </div>}
             {image && <ImageFramePicker value={draft.frame} onChange={(frameKey) => setDraft((current) => ({ ...current, frame: frameKey }))} />}
           </aside>
@@ -153,6 +199,7 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
           <span>{draft.src ? "Choose how to use this image." : "Choose an uploaded image or upload a new one."}</span>
           <div>
             <button className="button button-secondary" type="button" onClick={onClose}>Cancel</button>
+            {image && sourceAsset && selectedAsset && sourceAsset.url !== selectedAsset.url && <button className="button button-secondary" type="button" disabled={isReplacing} onClick={replaceEverywhere}>{isReplacing ? "Replacing…" : "Replace everywhere"}</button>}
             {!image && <button className="button button-secondary" type="button" disabled={!selectedAsset} onClick={() => { if (selectedAsset) { onUseAsBackground(selectedAsset); onClose(); } }}>Use as background</button>}
             {!image && <button className="button button-primary" type="button" disabled={!selectedAsset} onClick={() => { if (selectedAsset) { onAddFloating(selectedAsset); onClose(); } }}>Add to slide</button>}
             {image && <button className="button button-primary" type="button" disabled={!draft.src} onClick={() => { onApply(image.id, draft); onClose(); }}>Use image</button>}

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { BlockDropZone, isActiveTarget, type BlockDndController, type BlockDropTarget, useBlockDnd } from "@/components/BlockDnd";
 import IconTooltip from "@/components/IconTooltip";
 import type { MediaAsset } from "@/lib/data/media";
+import { alignFloatingImage, clampFloatingImage, imageAspectRatio, snapFloatingPosition, snapRotation, type ImageAlignment } from "@/lib/image-geometry";
 import { hasMediaDrag, readMediaDrag } from "@/lib/media-dnd";
 import { frameByKey, patternStyle, surfaceStyle } from "@/lib/slides/styles";
 import type { ContentNode, LayoutNode, Node, RichText, SlideDoc } from "@/lib/slides/types";
@@ -19,6 +20,7 @@ export type SlideCanvasEditor = {
   onEditImage: (node: Extract<ContentNode, { type: "image" }>) => void;
   onAssignMedia: (id: string, asset: MediaAsset) => void;
   onAddFloatingMedia: (asset: MediaAsset, position: { x: number; y: number }) => void;
+  onTransformImage: (id: string, update: Partial<Extract<ContentNode, { type: "image" }>["props"]>) => void;
   onText: (id: string, text: string) => void;
   onSwapColumns: (node: LayoutNode) => void;
 };
@@ -40,6 +42,9 @@ export default function SlideCanvas({ doc, theme, editor }: { doc: SlideDoc; the
     ? patternStyle(doc.style.pattern, theme)
     : surfaceStyle(doc.style?.surface, theme);
   const backgroundImage = doc.style?.backgroundImage;
+  const backgroundPosition = backgroundImage?.focalX !== undefined || backgroundImage?.focalY !== undefined
+    ? `${backgroundImage.focalX ?? 50}% ${backgroundImage.focalY ?? (backgroundImage.position === "top" ? 0 : backgroundImage.position === "bottom" ? 100 : 50)}%`
+    : backgroundImage?.position ?? "center";
   return (
     <div
       className={`slide-viewport${editor ? " is-editing" : ""}${mediaDragOver ? " is-media-drop-target" : ""}`}
@@ -73,7 +78,7 @@ export default function SlideCanvas({ doc, theme, editor }: { doc: SlideDoc; the
       }}
     >
       {backgroundImage?.src && <>
-        <div className="slide-background-image" aria-hidden="true" style={{ backgroundImage: `url(${JSON.stringify(backgroundImage.src)})`, backgroundPosition: backgroundImage.position ?? "center" }} />
+        <div className="slide-background-image" aria-hidden="true" style={{ backgroundImage: `url(${JSON.stringify(backgroundImage.src)})`, backgroundPosition }} />
         <div className={`slide-background-overlay is-${backgroundImage.overlay ?? "soft"}`} aria-hidden="true" />
       </>}
       {editor && <span className="slide-boundary-marker" aria-hidden="true">16:9 slide boundary</span>}
@@ -113,17 +118,132 @@ function NodeList({ className, nodes, parentId, axis, editor, dnd, style, theme 
 
 function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" | "dark"; editor?: SlideCanvasEditor; dnd?: BlockDndController }) {
   const [mediaDragOver, setMediaDragOver] = useState(false);
+  const ignoreImageClick = useRef(false);
   const contentStyle = !isLayout(node) ? surfaceStyle(node.style?.surface, theme) : undefined;
+  const rotationStyle = !isLayout(node) && node.type === "image" && node.props.rotation
+    ? { transform: `rotate(${node.props.rotation}deg)` }
+    : undefined;
   const rendered = isLayout(node)
     ? <RenderLayout node={node} theme={theme} editor={editor} dnd={dnd} />
-    : <div className={`slide-node-surface${contentStyle ? " has-surface" : ""}${isFloatingImage(node) ? " is-floating-image" : ""}`} style={{ ...contentStyle, ...(!editor && isFloatingImage(node) ? floatingImageStyle(node) : undefined) }}><RenderContent node={node} onText={editor?.onText} /></div>;
+    : <div className={`slide-node-surface${contentStyle ? " has-surface" : ""}${isFloatingImage(node) ? " is-floating-image" : ""}`} style={{ ...contentStyle, ...(!editor && isFloatingImage(node) ? floatingImageStyle(node) : undefined), ...rotationStyle }}><RenderContent node={node} onText={editor?.onText} /></div>;
   if (!editor) return rendered;
+  const activeEditor = editor;
+
+  function startImageMove(event: React.PointerEvent<HTMLDivElement>) {
+    if (!isFloatingImage(node) || event.button !== 0) return;
+    const canvas = event.currentTarget.closest(".slide-canvas");
+    if (!(canvas instanceof HTMLElement)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const bounds = canvas.getBoundingClientRect();
+    const start = clampFloatingImage(node.props);
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let moved = false;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+    function move(pointer: PointerEvent) {
+      const deltaX = pointer.clientX - startX;
+      const deltaY = pointer.clientY - startY;
+      if (!moved && Math.hypot(deltaX, deltaY) < 3) return;
+      moved = true;
+      activeEditor.onTransformImage(node.id, snapFloatingPosition({
+        ...start,
+        x: (start.x ?? 0) + deltaX / bounds.width * 100,
+        y: (start.y ?? 0) + deltaY / bounds.height * 100,
+      }));
+    }
+    function finish() {
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      if (moved) {
+        ignoreImageClick.current = true;
+        window.setTimeout(() => { ignoreImageClick.current = false; }, 0);
+      }
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  }
+
+  function startImageResize(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!isFloatingImage(node) || event.button !== 0) return;
+    const canvas = event.currentTarget.closest(".slide-canvas");
+    if (!(canvas instanceof HTMLElement)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const bounds = canvas.getBoundingClientRect();
+    const start = clampFloatingImage(node.props);
+    const startX = event.clientX;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+    function move(pointer: PointerEvent) {
+      activeEditor.onTransformImage(node.id, clampFloatingImage({
+        ...start,
+        width: (start.width ?? 30) + (pointer.clientX - startX) / bounds.width * 100,
+      }));
+    }
+    function finish() {
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  }
+
+  function startImageRotation(event: React.PointerEvent<HTMLButtonElement>) {
+    if (!isFloatingImage(node) || event.button !== 0) return;
+    const block = event.currentTarget.closest(".editable-slide-block");
+    if (!(block instanceof HTMLElement)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const bounds = block.getBoundingClientRect();
+    const centerX = bounds.left + bounds.width / 2;
+    const centerY = bounds.top + bounds.height / 2;
+    const startAngle = Math.atan2(event.clientY - centerY, event.clientX - centerX) * 180 / Math.PI;
+    const startRotation = node.props.rotation ?? 0;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = "none";
+    function move(pointer: PointerEvent) {
+      const angle = Math.atan2(pointer.clientY - centerY, pointer.clientX - centerX) * 180 / Math.PI;
+      activeEditor.onTransformImage(node.id, { rotation: snapRotation(startRotation + angle - startAngle) });
+    }
+    function finish() {
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  }
+
+  function alignImage(alignment: ImageAlignment) {
+    if (isFloatingImage(node)) activeEditor.onTransformImage(node.id, alignFloatingImage(node.props, alignment));
+  }
+
   return (
     <section
       className={`editable-slide-block editable-slide-block-${node.kind}${dnd?.draggingId === node.id ? " is-dragging" : ""}`}
       data-node-id={node.id}
       tabIndex={0}
       aria-label={`${node.type} block`}
+      onKeyDown={(event) => {
+        if (!isFloatingImage(node) || event.target !== event.currentTarget || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+        event.preventDefault();
+        const step = event.shiftKey ? 5 : 1;
+        editor.onTransformImage(node.id, clampFloatingImage({
+          ...node.props,
+          x: (node.props.x ?? 60) + (event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0),
+          y: (node.props.y ?? 18) + (event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0),
+        }));
+      }}
     >
       <header className="block-chrome">
         <div
@@ -184,7 +304,12 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
         role={node.type === "image" ? "button" : undefined}
         tabIndex={node.type === "image" ? 0 : undefined}
         aria-label={node.type === "image" ? "Open media library for image block" : undefined}
-        onClick={() => { if (node.type === "image") editor.onEditImage(node); }}
+        style={isFloatingImage(node) ? { aspectRatio: String(imageAspectRatio(node.props.aspectRatio)) } : undefined}
+        onPointerDown={startImageMove}
+        onClick={() => {
+          if (node.type !== "image" || ignoreImageClick.current) return;
+          editor.onEditImage(node);
+        }}
         onKeyDown={(event) => {
           if (node.type === "image" && (event.key === "Enter" || event.key === " ")) {
             event.preventDefault();
@@ -217,6 +342,18 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
           editor.onAssignMedia(node.id, asset);
         }}
       >{rendered}</div>
+      {isFloatingImage(node) && <>
+        <button className="floating-image-rotate-handle" type="button" aria-label="Rotate image" title="Drag to rotate; keyboard activation rotates 15°" onPointerDown={startImageRotation} onClick={(event) => { if (event.detail === 0) editor.onTransformImage(node.id, { rotation: snapRotation((node.props.rotation ?? 0) + 15, 0) }); }}>↻</button>
+        <button className="floating-image-resize-handle" type="button" aria-label="Resize image proportionally" title="Drag to resize; keyboard activation makes the image wider" onPointerDown={startImageResize} onClick={(event) => { if (event.detail === 0) editor.onTransformImage(node.id, clampFloatingImage({ ...node.props, width: (node.props.width ?? 30) + 5 })); }}>↘</button>
+        <div className="floating-image-align-actions" role="group" aria-label="Align image on slide">
+          <button type="button" title="Align left" aria-label="Align image left" onClick={() => alignImage("left")}>↤</button>
+          <button type="button" title="Center horizontally" aria-label="Center image horizontally" onClick={() => alignImage("center-x")}>↔</button>
+          <button type="button" title="Align right" aria-label="Align image right" onClick={() => alignImage("right")}>↦</button>
+          <button type="button" title="Align top" aria-label="Align image top" onClick={() => alignImage("top")}>↥</button>
+          <button type="button" title="Center vertically" aria-label="Center image vertically" onClick={() => alignImage("center-y")}>↕</button>
+          <button type="button" title="Align bottom" aria-label="Align image bottom" onClick={() => alignImage("bottom")}>↧</button>
+        </div>
+      </>}
     </section>
   );
 }
@@ -263,10 +400,12 @@ function isFloatingImage(node: Node): node is Extract<ContentNode, { type: "imag
 }
 
 function floatingImageStyle(node: Extract<ContentNode, { type: "image" }>): React.CSSProperties {
+  const props = clampFloatingImage(node.props);
   return {
-    left: `${Math.max(0, Math.min(90, node.props.x ?? 60))}%`,
-    top: `${Math.max(0, Math.min(85, node.props.y ?? 18))}%`,
-    width: `${Math.max(12, Math.min(100, node.props.width ?? 30))}%`,
+    left: `${props.x}%`,
+    top: `${props.y}%`,
+    width: `${props.width}%`,
+    aspectRatio: String(props.aspectRatio),
   };
 }
 
@@ -283,7 +422,7 @@ function RenderContent({ node, onText }: { node: ContentNode; onText?: (id: stri
       const image = node.props.src ? (
       // User-provided image URLs can come from configured client or Blob hosts.
       // eslint-disable-next-line @next/next/no-img-element
-        <img className={`slide-image${frame ? " has-frame" : ""}`} style={frameStyle} src={node.props.src} alt={node.props.decorative ? "" : node.props.alt} />
+        <img className={`slide-image${frame ? " has-frame" : ""}`} style={{ ...frameStyle, objectFit: node.props.fit ?? "cover", objectPosition: `${node.props.focalX ?? 50}% ${node.props.focalY ?? 50}%` }} src={node.props.src} alt={node.props.decorative ? "" : node.props.alt} />
       ) : <div className={`slide-image-placeholder${frame ? " has-frame" : ""}`} style={frameStyle} role="img" aria-label="Empty image block">Image</div>;
       return <figure className="slide-figure">{image}{node.props.caption && <figcaption>{node.props.caption}</figcaption>}</figure>;
     }

@@ -15,6 +15,7 @@ import VoiceoverEditor from "@/components/VoiceoverEditor";
 import type { EditorDeck, EditorSlide } from "@/lib/data/editor";
 import type { LibraryBlockItem } from "@/lib/data/library";
 import type { MediaAsset, MediaLibraryData } from "@/lib/data/media";
+import { clampFloatingImage } from "@/lib/image-geometry";
 import { replaceMediaUrl } from "@/lib/media-references";
 import { hasMediaDrag, readMediaDrag } from "@/lib/media-dnd";
 import { LAYOUTS, migrateToLayout } from "@/lib/slides/layouts";
@@ -440,8 +441,41 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     return { asset: renamed, message: `Renamed to “${renamed.name}”.${referenceNote}${result.warning ? ` ${result.warning}` : ""}` };
   }
 
+  async function replaceMediaEverywhere(source: MediaAsset, target: MediaAsset): Promise<{ message: string }> {
+    const response = await fetch("/api/media", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sourcePathname: source.pathname, targetPathname: target.pathname, deckId: deck.id }),
+    });
+    const result = await response.json() as {
+      error?: string;
+      sourceUrl?: string;
+      targetUrl?: string;
+      referencesUpdated?: number;
+      slideCount?: number;
+      slideVersions?: Array<{ id: string; updatedAt: string }>;
+    };
+    if (!response.ok || !result.sourceUrl || !result.targetUrl) throw new Error(result.error ?? "The image could not be replaced everywhere.");
+    setDoc((current) => replaceMediaUrl(current, result.sourceUrl!, result.targetUrl!));
+    setSavedDoc((current) => replaceMediaUrl(current, result.sourceUrl!, result.targetUrl!));
+    const currentVersion = result.slideVersions?.find((slide) => slide.id === initialSlide.id);
+    if (currentVersion) setUpdatedAt(currentVersion.updatedAt);
+    const references = result.referencesUpdated ?? 0;
+    const slideCount = result.slideCount ?? 0;
+    return { message: `Replaced ${references} use${references === 1 ? "" : "s"} across ${slideCount} slide${slideCount === 1 ? "" : "s"}. The original file was kept.` };
+  }
+
   function applyImageProps(id: string, props: ContentProps["image"]) {
-    updateNode(id, (current) => current.type === "image" ? { ...current, props } : current);
+    updateNode(id, (current) => current.type === "image" ? { ...current, props: props.placement === "floating" ? clampFloatingImage(props) : props } : current);
+  }
+
+  function transformImage(id: string, update: Partial<ContentProps["image"]>) {
+    updateNode(id, (current) => current.type === "image" ? {
+      ...current,
+      props: current.props.placement === "floating"
+        ? clampFloatingImage({ ...current.props, ...update })
+        : { ...current.props, ...update },
+    } : current);
   }
 
   function swapColumns(node: LayoutNode) {
@@ -670,6 +704,8 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
                 </div>
                 {doc.style?.backgroundImage?.src && <div className="slide-background-controls">
                   <label>Crop<select value={doc.style.backgroundImage.position ?? "center"} onChange={(event) => updateSlideDesign({ backgroundImage: { ...doc.style!.backgroundImage!, position: event.target.value as SlideBackgroundImage["position"] } })}><option value="center">Center</option><option value="top">Top</option><option value="bottom">Bottom</option></select></label>
+                  <label>Focus X<input type="range" min={0} max={100} step={1} value={doc.style.backgroundImage.focalX ?? 50} onChange={(event) => updateSlideDesign({ backgroundImage: { ...doc.style!.backgroundImage!, focalX: Number(event.target.value) } })} /></label>
+                  <label>Focus Y<input type="range" min={0} max={100} step={1} value={doc.style.backgroundImage.focalY ?? (doc.style.backgroundImage.position === "top" ? 0 : doc.style.backgroundImage.position === "bottom" ? 100 : 50)} onChange={(event) => updateSlideDesign({ backgroundImage: { ...doc.style!.backgroundImage!, focalY: Number(event.target.value) } })} /></label>
                   <label>Text overlay<select value={doc.style.backgroundImage.overlay ?? "soft"} onChange={(event) => updateSlideDesign({ backgroundImage: { ...doc.style!.backgroundImage!, overlay: event.target.value as SlideBackgroundImage["overlay"] } })}><option value="none">None</option><option value="soft">Soft</option><option value="strong">Strong</option></select></label>
                   <button type="button" onClick={() => updateSlideDesign({ backgroundImage: null })}>Remove</button>
                 </div>}
@@ -697,6 +733,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             onEditImage: (node) => setMediaTargetId(node.id),
             onAssignMedia: assignMediaToImage,
             onAddFloatingMedia: addFloatingImageFromMedia,
+            onTransformImage: transformImage,
             onText: updateText,
             onSwapColumns: swapColumns,
           }} /></div>}
@@ -741,6 +778,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
         onUploaded={registerMedia}
         onDelete={deleteMediaAsset}
         onRename={renameMediaAsset}
+        onReplaceEverywhere={replaceMediaEverywhere}
         onApply={applyImageProps}
         onAddFloating={addFloatingImageFromMedia}
         onUseAsBackground={useMediaAsBackground}

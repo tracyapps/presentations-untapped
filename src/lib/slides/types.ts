@@ -25,6 +25,8 @@ export type SlideDoc = {
 export type SlideBackgroundImage = {
   src: string;
   position?: "center" | "top" | "bottom";
+  focalX?: number;
+  focalY?: number;
   overlay?: "none" | "soft" | "strong";
 };
 
@@ -78,6 +80,11 @@ export type ContentProps = {
     x?: number;
     y?: number;
     width?: number;
+    aspectRatio?: number;
+    rotation?: number;
+    fit?: "cover" | "contain";
+    focalX?: number;
+    focalY?: number;
   }; // alt required unless decorative
   list:       { ordered: boolean; items: RichText[] };
   process:    {

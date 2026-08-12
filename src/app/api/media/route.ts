@@ -21,12 +21,58 @@ function extension(pathname: string): string {
   return match?.[1].toLowerCase() ?? "";
 }
 
-async function referencedSlides(url: string) {
-  const rows = await db.select({ id: slides.id, position: slides.position, blocks: slides.blocks }).from(slides);
+async function referencedSlides(url: string, deckId?: string) {
+  const query = db.select({ id: slides.id, position: slides.position, blocks: slides.blocks }).from(slides);
+  const rows = deckId ? await query.where(eq(slides.deckId, deckId)) : await query;
   return rows.flatMap((slide) => {
     const references = countMediaReferences(slide.blocks, url);
     return references ? [{ ...slide, references }] : [];
   });
+}
+
+export async function POST(request: Request): Promise<NextResponse> {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: "Sign in to replace media." }, { status: 401 });
+
+  const token = getMediaBlobToken();
+  if (!token) return NextResponse.json({ error: "Vercel Blob is not configured." }, { status: 503 });
+
+  try {
+    const body = await request.json() as { sourcePathname?: unknown; targetPathname?: unknown; deckId?: unknown };
+    if (!validPathname(body.sourcePathname) || !validPathname(body.targetPathname)) {
+      return NextResponse.json({ error: "Choose two valid media-library images." }, { status: 400 });
+    }
+    if (typeof body.deckId !== "string" || !/^[0-9a-f-]{36}$/i.test(body.deckId)) {
+      return NextResponse.json({ error: "Choose a valid presentation." }, { status: 400 });
+    }
+    if (body.sourcePathname === body.targetPathname) {
+      return NextResponse.json({ error: "Choose a different replacement image." }, { status: 400 });
+    }
+
+    const [source, target] = await Promise.all([
+      head(body.sourcePathname, { token }),
+      head(body.targetPathname, { token }),
+    ]);
+    const affected = await referencedSlides(source.url, body.deckId);
+    const now = new Date();
+    await Promise.all(affected.map((slide) => db.update(slides).set({
+      blocks: replaceMediaUrl(slide.blocks, source.url, target.url),
+      updatedAt: now,
+    }).where(eq(slides.id, slide.id))));
+
+    return NextResponse.json({
+      replaced: true,
+      sourceUrl: source.url,
+      targetUrl: target.url,
+      referencesUpdated: affected.reduce((total, slide) => total + slide.references, 0),
+      slideCount: affected.length,
+      slidePositions: affected.map((slide) => slide.position).sort((a, b) => a - b),
+      slideVersions: affected.map((slide) => ({ id: slide.id, updatedAt: now.toISOString() })),
+    });
+  } catch (error) {
+    console.error("Failed to replace media references", error);
+    return NextResponse.json({ error: "The media references could not all be replaced. No files were deleted; reload and try again." }, { status: 500 });
+  }
 }
 
 export async function PATCH(request: Request): Promise<NextResponse> {
