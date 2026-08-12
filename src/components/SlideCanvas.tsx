@@ -231,10 +231,15 @@ function editableText(value: RichText): string {
 function InlineText({ value, onChange, className }: { value: RichText; onChange: (text: string) => void; className?: string }) {
   return <span
     className={`direct-text-editor${className ? ` ${className}` : ""}`}
-    contentEditable
+    contentEditable="plaintext-only"
     suppressContentEditableWarning
     spellCheck
-    onInput={(event) => onChange(event.currentTarget.textContent ?? "")}
+    dir="ltr"
+    lang="en"
+    onBlur={(event) => {
+      const text = event.currentTarget.innerText.replace(/\n$/, "");
+      if (text !== editableText(value)) onChange(text);
+    }}
   >{editableText(value)}</span>;
 }
 
