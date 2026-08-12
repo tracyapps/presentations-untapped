@@ -13,6 +13,7 @@ export type SlideCanvasEditor = {
   onDelete: (node: Node) => void;
   onDuplicate: (node: Node) => void;
   onMove: (node: Node, direction: -1 | 1) => void;
+  onLayer: (node: Extract<ContentNode, { type: "image" }>, action: "back" | "backward" | "forward" | "front") => void;
   onDrop: (sourceId: string, target: BlockDropTarget) => void;
   onSaveToLibrary: (node: Node) => void;
   onEditImage: (node: Extract<ContentNode, { type: "image" }>) => void;
@@ -139,6 +140,20 @@ function RenderNode({ node, theme, editor, dnd }: { node: Node; theme: "light" |
           <strong>{node.type}</strong>
         </div>
         <div className="block-actions">
+          {isFloatingImage(node) && <>
+            <IconTooltip label={<>Send to <strong>back</strong></>} description="Place this image behind every other floating image.">
+              <button type="button" onClick={() => editor.onLayer(node, "back")} aria-label="Send image to back">⇤</button>
+            </IconTooltip>
+            <IconTooltip label={<>Move <strong>backward</strong></>} description="Move this image back one layer.">
+              <button type="button" onClick={() => editor.onLayer(node, "backward")} aria-label="Move image backward">‹</button>
+            </IconTooltip>
+            <IconTooltip label={<>Move <strong>forward</strong></>} description="Move this image forward one layer.">
+              <button type="button" onClick={() => editor.onLayer(node, "forward")} aria-label="Move image forward">›</button>
+            </IconTooltip>
+            <IconTooltip label={<>Bring to <strong>front</strong></>} description="Place this image above every other floating image.">
+              <button type="button" onClick={() => editor.onLayer(node, "front")} aria-label="Bring image to front">⇥</button>
+            </IconTooltip>
+          </>}
           <IconTooltip label={<>Move <strong>up</strong></>} description={`Move this ${node.type} earlier.`}>
             <button type="button" onClick={() => editor.onMove(node, -1)} aria-label={`Move ${node.type} up`}>↑</button>
           </IconTooltip>

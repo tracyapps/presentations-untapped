@@ -10,7 +10,9 @@ import type { ContentNode, ContentProps } from "@/lib/slides/types";
 type ImageNode = Extract<ContentNode, { type: "image" }>;
 
 type MediaLibraryModalProps = {
+  open: boolean;
   image: ImageNode | null;
+  initialAsset?: MediaAsset | null;
   items: MediaAsset[];
   configured: boolean;
   loadError?: string;
@@ -18,23 +20,27 @@ type MediaLibraryModalProps = {
   onUploaded: (asset: MediaAsset) => void;
   onDelete: (asset: MediaAsset) => Promise<boolean>;
   onApply: (id: string, props: ContentProps["image"]) => void;
+  onAddFloating: (asset: MediaAsset) => void;
+  onUseAsBackground: (asset: MediaAsset) => void;
 };
 
 function defaultAlt(asset: MediaAsset): string {
   return asset.name.replace(/\.[^.]+$/, "").replaceAll("-", " ");
 }
 
-export default function MediaLibraryModal({ image, items, configured, loadError, onClose, onUploaded, onDelete, onApply }: MediaLibraryModalProps) {
+export default function MediaLibraryModal({ open, image, initialAsset, items, configured, loadError, onClose, onUploaded, onDelete, onApply, onAddFloating, onUseAsBackground }: MediaLibraryModalProps) {
   const [draft, setDraft] = useState<ContentProps["image"]>({ src: "", alt: "" });
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (!image) return;
-    setDraft({ ...image.props });
-  }, [image]);
+    if (!open) return;
+    if (image) setDraft({ ...image.props });
+    else if (initialAsset) setDraft({ src: initialAsset.url, alt: defaultAlt(initialAsset), placement: "floating", x: 60, y: 18, width: 30 });
+    else setDraft({ src: "", alt: "", placement: "floating", x: 60, y: 18, width: 30 });
+  }, [image, initialAsset, open]);
 
   useEffect(() => {
-    if (!image) return;
+    if (!open) return;
     const previousOverflow = document.body.style.overflow;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     document.body.style.overflow = "hidden";
@@ -48,10 +54,10 @@ export default function MediaLibraryModal({ image, items, configured, loadError,
       window.removeEventListener("keydown", onKeyDown);
       previousFocus?.focus();
     };
-  }, [image, onClose]);
+  }, [open, onClose]);
 
   const selectedAsset = useMemo(() => items.find((item) => item.url === draft.src), [draft.src, items]);
-  if (!image) return null;
+  if (!open) return null;
 
   const frame = frameByKey(draft.frame);
   const frameStyle = frame ? { WebkitMaskImage: `url("${frame.asset}")`, maskImage: `url("${frame.asset}")` } : undefined;
@@ -70,7 +76,7 @@ export default function MediaLibraryModal({ image, items, configured, loadError,
     <div className="media-modal-backdrop">
       <section className="media-modal" role="dialog" aria-modal="true" aria-labelledby="media-modal-title">
         <header className="media-modal-header">
-          <div><p className="eyebrow">Image block</p><h2 id="media-modal-title">Choose media</h2></div>
+          <div><p className="eyebrow">{image ? "Image block" : "Media library"}</p><h2 id="media-modal-title">{image ? "Choose media" : "Preview and use media"}</h2></div>
           <button ref={closeRef} type="button" className="media-modal-close" aria-label="Close media library" onClick={onClose}>×</button>
         </header>
         <div className="media-modal-body">
@@ -96,22 +102,29 @@ export default function MediaLibraryModal({ image, items, configured, loadError,
               </> : <span>No image selected</span>}
             </div>
             {selectedAsset && <div className="media-modal-file-meta"><strong>{selectedAsset.name}</strong><span>{Math.max(1, Math.round(selectedAsset.size / 1024))} KB</span></div>}
-            <label>Image URL<input type="url" value={draft.src} onChange={(event) => setDraft((current) => ({ ...current, src: event.target.value }))} placeholder="https://…" /></label>
-            <label>Alt text<input type="text" value={draft.alt} disabled={draft.decorative} onChange={(event) => setDraft((current) => ({ ...current, alt: event.target.value }))} /></label>
-            <label className="outline-check"><input type="checkbox" checked={draft.decorative ?? false} onChange={(event) => setDraft((current) => ({ ...current, decorative: event.target.checked }))} />Decorative image</label>
-            <label>Caption<textarea rows={3} value={draft.caption ?? ""} onChange={(event) => setDraft((current) => ({ ...current, caption: event.target.value }))} placeholder="Optional caption shown below the image" /></label>
-            <label className="outline-check"><input type="checkbox" checked={draft.placement === "floating"} onChange={(event) => setDraft((current) => ({ ...current, placement: event.target.checked ? "floating" : "flow", x: current.x ?? 60, y: current.y ?? 18, width: current.width ?? 30 }))} />Float image on slide</label>
-            {draft.placement === "floating" && <div className="floating-image-controls">
+            {image && <>
+              <label>Image URL<input type="url" value={draft.src} onChange={(event) => setDraft((current) => ({ ...current, src: event.target.value }))} placeholder="https://…" /></label>
+              <label>Alt text<input type="text" value={draft.alt} disabled={draft.decorative} onChange={(event) => setDraft((current) => ({ ...current, alt: event.target.value }))} /></label>
+              <label className="outline-check"><input type="checkbox" checked={draft.decorative ?? false} onChange={(event) => setDraft((current) => ({ ...current, decorative: event.target.checked }))} />Decorative image</label>
+              <label>Caption<textarea rows={3} value={draft.caption ?? ""} onChange={(event) => setDraft((current) => ({ ...current, caption: event.target.value }))} placeholder="Optional caption shown below the image" /></label>
+              <label className="outline-check"><input type="checkbox" checked={draft.placement === "floating"} onChange={(event) => setDraft((current) => ({ ...current, placement: event.target.checked ? "floating" : "flow", x: current.x ?? 60, y: current.y ?? 18, width: current.width ?? 30 }))} />Float image on slide</label>
+            </>}
+            {image && draft.placement === "floating" && <div className="floating-image-controls">
               <label>Horizontal <input type="range" min={0} max={88} step={1} value={draft.x ?? 60} onChange={(event) => setDraft((current) => ({ ...current, x: Number(event.target.value) }))} /></label>
               <label>Vertical <input type="range" min={0} max={82} step={1} value={draft.y ?? 18} onChange={(event) => setDraft((current) => ({ ...current, y: Number(event.target.value) }))} /></label>
               <label>Width <input type="range" min={12} max={100} step={1} value={draft.width ?? 30} onChange={(event) => setDraft((current) => ({ ...current, width: Number(event.target.value) }))} /></label>
             </div>}
-            <ImageFramePicker value={draft.frame} onChange={(frameKey) => setDraft((current) => ({ ...current, frame: frameKey }))} />
+            {image && <ImageFramePicker value={draft.frame} onChange={(frameKey) => setDraft((current) => ({ ...current, frame: frameKey }))} />}
           </aside>
         </div>
         <footer className="media-modal-footer">
-          <span>{draft.src ? "Ready to use this image." : "Choose an uploaded image or upload a new one."}</span>
-          <div><button className="button button-secondary" type="button" onClick={onClose}>Cancel</button><button className="button button-primary" type="button" onClick={() => { onApply(image.id, draft); onClose(); }}>Use image</button></div>
+          <span>{draft.src ? "Choose how to use this image." : "Choose an uploaded image or upload a new one."}</span>
+          <div>
+            <button className="button button-secondary" type="button" onClick={onClose}>Cancel</button>
+            {!image && <button className="button button-secondary" type="button" disabled={!selectedAsset} onClick={() => { if (selectedAsset) { onUseAsBackground(selectedAsset); onClose(); } }}>Use as background</button>}
+            {!image && <button className="button button-primary" type="button" disabled={!selectedAsset} onClick={() => { if (selectedAsset) { onAddFloating(selectedAsset); onClose(); } }}>Add to slide</button>}
+            {image && <button className="button button-primary" type="button" disabled={!draft.src} onClick={() => { onApply(image.id, draft); onClose(); }}>Use image</button>}
+          </div>
         </footer>
       </section>
     </div>

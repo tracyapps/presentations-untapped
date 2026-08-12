@@ -134,7 +134,7 @@ export type AddSlideResult =
   | { status: "created"; position: number }
   | { status: "error"; message: string };
 
-export async function addSlideAction(deckId: string): Promise<AddSlideResult> {
+export async function addSlideAction(deckId: string, layoutKey: string): Promise<AddSlideResult> {
   const { userId } = await auth();
   if (!userId) return { status: "error", message: "Your session expired. Sign in again." };
 
@@ -146,12 +146,13 @@ export async function addSlideAction(deckId: string): Promise<AddSlideResult> {
     .from(slides)
     .where(eq(slides.deckId, deckId));
   const position = (last?.position ?? 0) + 1;
-  const starter = layoutByKey("title-paragraph")?.build();
-  if (!starter) return { status: "error", message: "The starter layout is unavailable." };
+  const layout = layoutByKey(layoutKey);
+  if (!layout) return { status: "error", message: "Choose a valid slide layout." };
+  const starter = layout.build();
 
   const now = new Date();
   await db.batch([
-    db.insert(slides).values({ deckId, position, layoutKey: "title-paragraph", blocks: starter }),
+    db.insert(slides).values({ deckId, position, layoutKey, blocks: starter }),
     db.update(decks).set({ updatedAt: now }).where(eq(decks.id, deckId)),
   ]);
   revalidatePath("/decks");

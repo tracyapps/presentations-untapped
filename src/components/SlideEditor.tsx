@@ -25,9 +25,14 @@ import { findNode, isLayout } from "@/lib/slides/types";
 type Tab = "design" | "outline" | "voiceover";
 type SaveState = "saved" | "dirty" | "saving" | "conflict" | "error";
 type PaletteSection = "layouts" | "design" | "content" | "library" | "media";
+type SlideNavView = "large" | "compact" | "pages";
+type AddLayoutView = "large" | "compact";
 type TextNode = Extract<ContentNode, { type: "title" | "tagline" | "blockquote" | "callout" | "paragraph" }>;
 
 const PALETTE_STATE_KEY = "lu-editor-palette-sections-v1";
+const SLIDE_NAV_VIEW_KEY = "lu-editor-slide-nav-view-v1";
+const ADD_LAYOUT_VIEW_KEY = "lu-editor-add-layout-view-v1";
+const ADD_LAYOUT_KEY = "lu-editor-last-add-layout-v1";
 const DEFAULT_PALETTE_STATE: Record<PaletteSection, boolean> = {
   layouts: true,
   design: true,
@@ -79,6 +84,9 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   const [doc, setDoc] = useState(initialSlide.blocks);
   const [savedDoc, setSavedDoc] = useState(initialSlide.blocks);
   const [layoutKey, setLayoutKey] = useState(initialSlide.layoutKey);
+  const [addLayoutKey, setAddLayoutKey] = useState(initialSlide.layoutKey);
+  const [slideNavView, setSlideNavView] = useState<SlideNavView>("large");
+  const [addLayoutView, setAddLayoutView] = useState<AddLayoutView>("large");
   const [savedLayoutKey, setSavedLayoutKey] = useState(initialSlide.layoutKey);
   const [updatedAt, setUpdatedAt] = useState(initialSlide.updatedAt);
   const [saveState, setSaveState] = useState<SaveState>("saved");
@@ -87,6 +95,8 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   const [libraryTarget, setLibraryTarget] = useState<Node | null>(null);
   const [libraryName, setLibraryName] = useState("");
   const [mediaTargetId, setMediaTargetId] = useState<string | null>(null);
+  const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false);
+  const [mediaInitialAsset, setMediaInitialAsset] = useState<MediaAsset | null>(null);
   const [backgroundDragOver, setBackgroundDragOver] = useState(false);
   const [voiceoverDirty, setVoiceoverDirty] = useState(false);
   const [isAdding, startAdding] = useTransition();
@@ -104,7 +114,11 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     const node = findNode(doc, mediaTargetId);
     return node && !isLayout(node) && node.type === "image" ? node : null;
   }, [doc, mediaTargetId]);
-  const closeMediaModal = useCallback(() => setMediaTargetId(null), []);
+  const closeMediaModal = useCallback(() => {
+    setMediaTargetId(null);
+    setMediaLibraryOpen(false);
+    setMediaInitialAsset(null);
+  }, []);
 
   useEffect(() => { docRef.current = doc; }, [doc]);
   useEffect(() => { layoutRef.current = layoutKey; }, [layoutKey]);
@@ -116,11 +130,22 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
       localStorage.removeItem(PALETTE_STATE_KEY);
     }
   }, []);
+  useEffect(() => {
+    const nav = localStorage.getItem(SLIDE_NAV_VIEW_KEY);
+    if (nav === "large" || nav === "compact" || nav === "pages") setSlideNavView(nav);
+    const addView = localStorage.getItem(ADD_LAYOUT_VIEW_KEY);
+    if (addView === "large" || addView === "compact") setAddLayoutView(addView);
+    const lastLayout = localStorage.getItem(ADD_LAYOUT_KEY);
+    if (lastLayout && LAYOUTS.some((layout) => layout.key === lastLayout)) setAddLayoutKey(lastLayout);
+  }, []);
 
   const visibleLibraryItems = useMemo(() => {
     const query = libraryQuery.trim().toLowerCase();
     return availableLibraryItems.filter((item) => !query || `${item.name} ${item.node.type}`.toLowerCase().includes(query));
   }, [availableLibraryItems, libraryQuery]);
+  const navigationSlides = useMemo(() => deck.slides.map((slide) => slide.id === initialSlide.id
+    ? { ...slide, blocks: doc, layoutKey }
+    : slide), [deck.slides, doc, initialSlide.id, layoutKey]);
 
   function togglePaletteSection(section: PaletteSection) {
     setPaletteState((current) => {
@@ -349,19 +374,41 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     setLibraryNotice(`Added ${asset.name} as a floating image on slide ${initialSlide.position}.`);
   }
 
+  function openMediaLibrary(asset?: MediaAsset) {
+    setMediaTargetId(null);
+    setMediaInitialAsset(asset ?? null);
+    setMediaLibraryOpen(true);
+  }
+
+  function changeImageLayer(id: string, action: "back" | "backward" | "forward" | "front") {
+    const blocks = [...docRef.current.blocks];
+    const index = blocks.findIndex((node) => node.id === id);
+    if (index < 0) return;
+    const target = action === "back" ? 0
+      : action === "front" ? blocks.length - 1
+      : action === "backward" ? Math.max(0, index - 1)
+      : Math.min(blocks.length - 1, index + 1);
+    if (target === index) return;
+    const [node] = blocks.splice(index, 1);
+    blocks.splice(target, 0, node);
+    markDoc({ ...docRef.current, blocks });
+  }
+
   function useMediaAsBackground(asset: MediaAsset) {
     updateSlideDesign({ backgroundImage: { src: asset.url, position: "center", overlay: "soft" } });
     setLibraryNotice(`Set ${asset.name} as the background for slide ${initialSlide.position}.`);
   }
 
-  function addSlide() {
+  function addSlide(selectedLayout = addLayoutKey) {
+    setAddLayoutKey(selectedLayout);
+    localStorage.setItem(ADD_LAYOUT_KEY, selectedLayout);
     startAdding(async () => {
       try {
         if (dirty) {
           const saved = await save();
           if (!saved || saved.status !== "saved") return;
         }
-        const result = await addSlideAction(deck.id);
+        const result = await addSlideAction(deck.id, selectedLayout);
         if (result.status === "error") {
           setSaveState("error"); setMessage(result.message); return;
         }
@@ -450,40 +497,48 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
       {libraryNotice && !libraryTarget && <div className="editor-message editor-message-success" role="status">{libraryNotice}</div>}
 
       <div className="editor-body">
-        <aside className="slide-strip" aria-label="Slides">
-          <div className="slide-strip-heading">
-            <span>Slides</span>
-            <div>
-              <button type="button" onClick={duplicateCurrentSlide} disabled={isAdding} aria-label="Duplicate current slide">⧉</button>
-              <button type="button" onClick={deleteCurrentSlide} disabled={isAdding || deck.slides.length === 1} aria-label="Delete current slide">−</button>
-              <button type="button" onClick={addSlide} disabled={isAdding} aria-label="Add slide">{isAdding ? "…" : "+"}</button>
-            </div>
+        <aside className="resource-palette" aria-label="Add slides and reusable assets">
+          <div className="resource-palette-topbar">
+            <div><strong>Add slide</strong><span>{LAYOUTS.find((layout) => layout.key === addLayoutKey)?.name}</span></div>
+            <button type="button" onClick={() => addSlide()} disabled={isAdding} aria-label={`Add ${LAYOUTS.find((layout) => layout.key === addLayoutKey)?.name ?? "slide"}`}>{isAdding ? "…" : "+"}</button>
           </div>
-          <ol>
-            {deck.slides.map((slide) => (
-              <li key={slide.id}>
-                <Link className={slide.id === initialSlide.id ? "is-current" : ""} href={`/decks/${deck.id}/edit/${slide.position}`} onClick={confirmNavigate}>
-                  <span>{slide.position}</span><div data-theme={deck.themeDefault}>{slide.blocks.blocks[0] && <MiniNode node={slide.blocks.blocks[0]} />}</div>
-                </Link>
-              </li>
-            ))}
-          </ol>
+          <PaletteSectionPanel id="layouts" label="Choose a layout" open={paletteState.layouts} onToggle={() => togglePaletteSection("layouts")}>
+            <p className="palette-help">Choose a layout to create a new slide with it.</p>
+            <div className={`layout-palette layout-add-palette is-${addLayoutView}`}>
+              {LAYOUTS.map((layout) => (
+                <button type="button" className={layout.key === addLayoutKey ? "is-selected" : ""} onClick={() => addSlide(layout.key)} disabled={isAdding} key={layout.key}>
+                  <span dangerouslySetInnerHTML={{ __html: layout.preview }} aria-hidden="true" />
+                  <strong>{layout.name}</strong>
+                  <small>Add slide</small>
+                </button>
+              ))}
+            </div>
+            <PanelViewToggle label="Add slide view" value={addLayoutView} options={[{ value: "large", label: "Cards", icon: "▦" }, { value: "compact", label: "Compact", icon: "☷" }]} onChange={(value) => { setAddLayoutView(value); localStorage.setItem(ADD_LAYOUT_VIEW_KEY, value); }} />
+          </PaletteSectionPanel>
+          <PaletteSectionPanel id="library" label="Library" count={availableLibraryItems.length} open={paletteState.library} onToggle={() => togglePaletteSection("library")}>
+            <div className="library-palette-heading"><p className="palette-help">Insert a reusable block.</p><Link href="/library" onClick={confirmNavigate}>Open library</Link></div>
+            <label className="library-search"><span className="sr-only">Search library blocks</span><input type="search" value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="Search saved blocks" /></label>
+            <div className="library-palette" aria-live="polite">
+              {visibleLibraryItems.map((item) => <button type="button" onClick={() => insertLibraryItem(item)} key={item.id}><strong>{item.name}</strong><span>{item.node.type.replace(/([A-Z])/g, " $1")}</span></button>)}
+              {!visibleLibraryItems.length && <p className="library-palette-empty">{availableLibraryItems.length ? "No matching blocks." : "Save a block with the star button to build your library."}</p>}
+            </div>
+          </PaletteSectionPanel>
+          <PaletteSectionPanel id="media" label="Media" count={mediaItems.length} open={paletteState.media} onToggle={() => togglePaletteSection("media")}>
+            <div className="library-palette-heading"><p className="palette-help">Click to preview and choose how to use an image.</p><button type="button" className="palette-text-action" onClick={() => openMediaLibrary()}>Open library</button></div>
+            <MediaLibraryPanel items={mediaItems} configured={mediaLibrary.configured} loadError={mediaLibrary.error} onUploaded={registerMedia} onSelect={openMediaLibrary} />
+          </PaletteSectionPanel>
         </aside>
 
-        <aside className="block-palette" aria-label="Block palette">
+        <aside className="block-palette" aria-label="Slide controls">
           {tab === "voiceover" ? (
             <div className="palette-note"><strong>Voiceover tools</strong><p>Each slide can have one reusable player and a manually timed caption track.</p></div>
           ) : (
             <>
-              <PaletteSectionPanel id="layouts" label="Layouts" open={paletteState.layouts} onToggle={() => togglePaletteSection("layouts")}>
-                <div className="layout-palette">
-                  {LAYOUTS.map((layout) => (
-                    <button type="button" className={layout.key === layoutKey ? "is-selected" : ""} onClick={() => changeLayout(layout.key)} key={layout.key}>
-                      <span dangerouslySetInnerHTML={{ __html: layout.preview }} aria-hidden="true" />
-                      <strong>{layout.name}</strong>
-                    </button>
-                  ))}
-                </div>
+              <PaletteSectionPanel id="content" label="Content" open={paletteState.content} onToggle={() => togglePaletteSection("content")}>
+                <p className="palette-subheading">Structure</p>
+                <div className="content-palette structure-palette">{STRUCTURE_PALETTE.map((item) => <button type="button" onClick={() => addLayoutBlock(item.type)} key={item.type}>{item.label}</button>)}</div>
+                <p className="palette-subheading">Blocks</p>
+                <div className="content-palette">{CONTENT_PALETTE.map((item) => <button type="button" onClick={() => addBlock(item.type)} key={item.type}>{item.label}</button>)}</div>
               </PaletteSectionPanel>
               {tab === "design" && <PaletteSectionPanel id="design" label="Slide design" open={paletteState.design} onToggle={() => togglePaletteSection("design")}>
                 <p className="palette-help">Surfaces and SVG art both respond to the preview mode.</p>
@@ -521,41 +576,22 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
                   <button type="button" onClick={() => updateSlideDesign({ backgroundImage: null })}>Remove</button>
                 </div>}
               </PaletteSectionPanel>}
-              <PaletteSectionPanel id="content" label="Content" open={paletteState.content} onToggle={() => togglePaletteSection("content")}>
-                <p className="palette-subheading">Structure</p>
-                <div className="content-palette structure-palette">
-                  {STRUCTURE_PALETTE.map((item) => <button type="button" onClick={() => addLayoutBlock(item.type)} key={item.type}>{item.label}</button>)}
-                </div>
-                <p className="palette-subheading">Blocks</p>
-                <div className="content-palette">
-                  {CONTENT_PALETTE.map((item) => <button type="button" onClick={() => addBlock(item.type)} key={item.type}>{item.label}</button>)}
-                </div>
-              </PaletteSectionPanel>
-              <PaletteSectionPanel id="library" label="Library" count={availableLibraryItems.length} open={paletteState.library} onToggle={() => togglePaletteSection("library")}>
-                <div className="library-palette-heading">
-                  <p className="palette-help">Insert a fresh copy of a saved block.</p>
-                  <Link href="/library" onClick={confirmNavigate}>Manage</Link>
-                </div>
-                <label className="library-search"><span className="sr-only">Search library blocks</span><input type="search" value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="Search saved blocks" /></label>
-                <div className="library-palette" aria-live="polite">
-                  {visibleLibraryItems.map((item) => <button type="button" onClick={() => insertLibraryItem(item)} key={item.id}><strong>{item.name}</strong><span>{item.node.type.replace(/([A-Z])/g, " $1")}</span></button>)}
-                  {!visibleLibraryItems.length && <p className="library-palette-empty">{availableLibraryItems.length ? "No matching blocks." : "Save a block with the star button to build your library."}</p>}
-                </div>
-              </PaletteSectionPanel>
-              <PaletteSectionPanel id="media" label="Media" count={mediaItems.length} open={paletteState.media} onToggle={() => togglePaletteSection("media")}>
-                <p className="palette-help">Click to add a floating image, drag onto the slide to place it, or drag into Background image above.</p>
-                <MediaLibraryPanel items={mediaItems} configured={mediaLibrary.configured} loadError={mediaLibrary.error} onUploaded={registerMedia} onSelect={addFloatingImageFromMedia} onUseAsBackground={useMediaAsBackground} onDelete={deleteMediaAsset} />
-              </PaletteSectionPanel>
             </>
           )}
         </aside>
 
+        <SlideNavigator deckId={deck.id} slides={navigationSlides} currentSlideId={initialSlide.id} theme={previewTheme} view={slideNavView} onViewChange={(value) => { setSlideNavView(value); localStorage.setItem(SLIDE_NAV_VIEW_KEY, value); }} onNavigate={confirmNavigate} onDuplicate={duplicateCurrentSlide} onDelete={deleteCurrentSlide} deletingDisabled={isAdding || deck.slides.length === 1} />
+
         <section className="editor-workspace">
-          <div className="editor-context"><span>Editing slide {initialSlide.position} of {deck.slides.length}</span><span>{layoutKey.replaceAll("-", " ")} · {previewTheme} preview</span></div>
+          <div className="editor-context">
+            <span>Editing slide {initialSlide.position} of {deck.slides.length}</span>
+            <label className="current-layout-control"><span>Switch slide layout</span><select value={layoutKey} onChange={(event) => changeLayout(event.target.value)}>{LAYOUTS.map((layout) => <option value={layout.key} key={layout.key}>{layout.name}</option>)}</select></label>
+          </div>
           {tab === "design" && <div className="design-workspace"><SlideCanvas doc={doc} theme={previewTheme} editor={{
             onDelete: removeBlock,
             onDuplicate: (node) => markDoc(duplicateNode(docRef.current, node.id)),
             onMove: (node, direction) => markDoc(moveNode(docRef.current, node.id, direction)),
+            onLayer: (node, action) => changeImageLayer(node.id, action),
             onDrop: dropBlock,
             onSaveToLibrary: openLibraryDialog,
             onEditImage: (node) => setMediaTargetId(node.id),
@@ -595,7 +631,9 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
         </div>
       )}
       <MediaLibraryModal
+        open={mediaLibraryOpen || !!mediaTarget}
         image={mediaTarget}
+        initialAsset={mediaInitialAsset}
         items={mediaItems}
         configured={mediaLibrary.configured}
         loadError={mediaLibrary.error}
@@ -603,6 +641,8 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
         onUploaded={registerMedia}
         onDelete={deleteMediaAsset}
         onApply={applyImageProps}
+        onAddFloating={addFloatingImageFromMedia}
+        onUseAsBackground={useMediaAsBackground}
       />
     </main>
   );
@@ -616,11 +656,45 @@ function PaletteSectionPanel({ id, label, count, open, onToggle, children }: { i
   </section>;
 }
 
-function MiniNode({ node }: { node: Node }) {
-  if (isLayout(node)) return <>{node.children.slice(0, 2).map((child) => <MiniNode node={child} key={child.id} />)}</>;
-  if (isTextNode(node)) return <small>{plainText(node.props.text)}</small>;
-  if (node.type === "statCard") return <small>{node.props.value}</small>;
-  return <small>{node.type}</small>;
+function PanelViewToggle<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: Array<{ value: T; label: string; icon: string }>; onChange: (value: T) => void }) {
+  return <div className="panel-view-toggle" role="group" aria-label={label}>
+    {options.map((option) => <button type="button" aria-label={option.label} title={option.label} aria-pressed={value === option.value} onClick={() => onChange(option.value)} key={option.value}><span aria-hidden="true">{option.icon}</span></button>)}
+  </div>;
+}
+
+function SlideNavigator({ deckId, slides, currentSlideId, theme, view, onViewChange, onNavigate, onDuplicate, onDelete, deletingDisabled }: {
+  deckId: string;
+  slides: EditorSlide[];
+  currentSlideId: string;
+  theme: "light" | "dark";
+  view: SlideNavView;
+  onViewChange: (view: SlideNavView) => void;
+  onNavigate: (event: React.MouseEvent) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  deletingDisabled: boolean;
+}) {
+  return <section className={`slide-navigator is-${view}`} aria-label="Slides">
+    <div className="slide-navigator-heading"><strong>Slides</strong><span>{slides.length}</span></div>
+    <ol className="slide-navigator-list">
+      {slides.map((slide) => {
+        const layout = LAYOUTS.find((item) => item.key === slide.layoutKey);
+        return <li key={slide.id}>
+          <Link className={slide.id === currentSlideId ? "is-current" : ""} href={`/decks/${deckId}/edit/${slide.position}`} aria-current={slide.id === currentSlideId ? "page" : undefined} onClick={onNavigate}>
+            {view === "pages" ? <span className="slide-page-number">{slide.position}</span> : <>
+              <span className="slide-nav-number">{slide.position}</span>
+              <div className="slide-nav-preview"><SlideCanvas doc={slide.blocks} theme={theme} /></div>
+              {view === "compact" && <div className="slide-nav-meta"><span dangerouslySetInnerHTML={{ __html: layout?.preview ?? "" }} aria-hidden="true" /><strong>{layout?.name ?? slide.layoutKey}</strong></div>}
+            </>}
+          </Link>
+        </li>;
+      })}
+    </ol>
+    <footer className="slide-navigator-footer">
+      <div className="slide-navigator-actions"><button type="button" onClick={onDuplicate} aria-label="Duplicate current slide">⧉ <span>Duplicate</span></button><button type="button" onClick={onDelete} disabled={deletingDisabled} aria-label="Delete current slide">− <span>Delete</span></button></div>
+      <PanelViewToggle label="Slide navigator view" value={view} options={[{ value: "large", label: "Large thumbnails", icon: "▣" }, { value: "compact", label: "Compact slides", icon: "▤" }, { value: "pages", label: "Slide numbers", icon: "•••" }]} onChange={onViewChange} />
+    </footer>
+  </section>;
 }
 
 function SurfaceSwatches({ value, theme, includeInherit = false, onChange }: { value: SurfaceChoice; theme: "light" | "dark"; includeInherit?: boolean; onChange: (surface: SurfaceChoice) => void }) {
