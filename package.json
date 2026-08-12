@@ -11,6 +11,7 @@
     "test:image-geometry": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-image-geometry.mjs",
     "test:media": "node scripts/check-media-policy.mjs",
     "test:media-references": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-media-references.mjs",
+    "test:publish": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-publish-policy.mjs",
     "test:parity": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-render-parity.mjs",
     "test:styles": "node scripts/check-slide-styles.mjs",
     "test:variables": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-variables.mjs",

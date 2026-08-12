@@ -10,6 +10,7 @@ import {
 } from "@/app/decks/[id]/edit/actions";
 import SlideCanvas from "@/components/SlideCanvas";
 import MediaLibraryPanel from "@/components/MediaLibraryPanel";
+import PublishControl from "@/components/PublishControl";
 import MediaLibraryModal from "@/components/MediaLibraryModal";
 import VoiceoverEditor from "@/components/VoiceoverEditor";
 import type { EditorDeck, EditorSlide } from "@/lib/data/editor";
@@ -637,6 +638,13 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             <button type="button" aria-label="Toggle slides row" title="Slide navigator" aria-pressed={panelLayout.slidesVisible} onClick={() => updatePanelLayout({ slidesVisible: !panelLayout.slidesVisible })}>▤</button>
           </div>
           <span className={`save-state save-state-${visibleSaveState}`} aria-live="polite">{stateLabel[visibleSaveState]}</span>
+          <PublishControl
+            deckId={deck.id}
+            status={deck.status}
+            clientSlug={deck.clientSlug}
+            deckSlug={deck.slug}
+            publicOrigin={process.env.NEXT_PUBLIC_DECKS_ORIGIN}
+          />
           {/* Split: presenting from the top is the common case and stays one
               click; presenting from where you are is the rehearsal case. */}
           <div className="editor-split">

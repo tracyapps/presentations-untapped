@@ -1456,3 +1456,47 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* --- Review and publishing (PLAN.md §5.7) -----------------------------
+   One control for the whole draft → in review → published flow. Status is
+   never colour-only: the dot is paired with its word. */
+.publish-control { position: relative; }
+.publish-trigger { display: inline-flex; align-items: center; gap: var(--space-2); }
+.publish-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-secondary); }
+.publish-trigger.is-draft .publish-dot { background: var(--border-strong); }
+.publish-trigger.is-in_review .publish-dot { background: var(--status-warning); }
+.publish-trigger.is-approved .publish-dot { background: var(--status-success); }
+
+.publish-panel { position: absolute; z-index: 40; top: calc(100% + var(--space-2)); right: 0; display: grid; gap: var(--space-4); width: min(400px, 90vw); padding: var(--space-4); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.publish-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 2px; background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+.publish-step { min-height: 32px; padding: 0 var(--space-2); background: transparent; color: var(--text-secondary); border: 0; border-radius: calc(var(--radius-sm) - 2px); font: var(--text-caption); font-weight: 800; }
+.publish-step:hover:not([data-disabled]):not(.is-current) { color: var(--text-primary); }
+.publish-step.is-current { background: var(--accent-primary); color: var(--text-on-accent); }
+.publish-step[data-disabled] { cursor: not-allowed; opacity: 0.55; }
+.publish-message { margin: 0; padding: var(--space-2) var(--space-3); background: var(--bg-teal-soft); color: var(--text-primary); border-radius: var(--radius-sm); font: var(--text-caption); }
+
+/* The checks are advice, not a gate — "Publish anyway" is always available.
+   A hard block on alt text only teaches people to type "image". */
+.publish-issues { display: grid; gap: var(--space-3); padding: var(--space-3); background: var(--bg-accent-soft); border: 1px solid var(--status-warning); border-radius: var(--radius-sm); }
+.publish-issues strong { font: var(--text-caption); font-weight: 850; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.publish-issues pre { max-height: 180px; overflow-y: auto; margin: 0; color: var(--text-primary); font: var(--text-caption); font-family: var(--font-mono); line-height: 1.6; white-space: pre-wrap; }
+.publish-issues > div { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.publish-issues .button { min-height: 32px; padding-inline: var(--space-3); font: var(--text-caption); font-weight: 750; }
+
+.publish-link { display: grid; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--border-default); }
+.publish-link label { display: grid; gap: var(--space-1); color: var(--text-secondary); font: var(--text-caption); font-weight: 750; }
+.publish-slug { display: flex; align-items: center; overflow: hidden; background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+.publish-slug i { flex: none; padding: 0 0 0 var(--space-2); color: var(--text-secondary); font-style: normal; }
+.publish-slug input { flex: 1; min-width: 0; min-height: 34px; padding: 0 var(--space-2); background: transparent; color: var(--text-primary); border: 0; font: var(--text-caption); }
+.publish-slug input:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
+.publish-live { display: flex; align-items: center; gap: var(--space-2); }
+.publish-live a { min-width: 0; overflow: hidden; color: var(--link-color); font: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.publish-live button { flex: none; min-height: 30px; padding: 0 var(--space-3); background: var(--bg-page); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; }
+.publish-live button:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.publish-hint { margin: 0; color: var(--text-secondary); font: var(--text-caption); line-height: 1.5; }
+
+/* The 404 a client sees. No app chrome, no links back in. */
+.public-missing { min-height: 100dvh; display: grid; place-items: center; padding: var(--space-6); background: var(--bg-page); color: var(--text-primary); text-align: center; }
+.public-missing > div { max-width: 46ch; display: grid; gap: var(--space-3); }
+.public-missing h1 { font: var(--text-h1); }
+.public-missing p:not(.eyebrow) { color: var(--text-secondary); line-height: 1.6; }

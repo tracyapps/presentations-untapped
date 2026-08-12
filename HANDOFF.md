@@ -325,6 +325,60 @@ picker no longer shoves Content and Design down the page. Note the panel's
 `overflow-y: auto` clips the menu to the panel box, which is the intended scope
 for a panel-level dropdown; `max-height: 62vh` keeps it inside.
 
+### MVP finish: review + publishing (Aug 12, final)
+
+`npx tsc --noEmit` clean, **eleven** test scripts passing (`test:publish` is new).
+DNS was changed on the Network Solutions side by Tapps this evening.
+
+**Do this first tomorrow:** run `npm run build` and hit a published deck logged
+out, in a private window. `next build` and `next lint` need the platform `swc`
+binary and have never run in this workspace — every check so far has been `tsc`
+plus the script suite.
+
+**What shipped**
+
+- `src/lib/publish.ts` — pre-publish checks: unresolved variables, missing alt
+  text, empty image blocks. Pure, no database. Reports per slide and collapses
+  repeats, so a slide with the same problem six times is one line.
+- `src/app/decks/publish-actions.ts` — `setDeckStatusAction` (draft ↔ in_review ↔
+  approved) and `setDeckSlugAction`. Approving runs the checks and returns
+  `blocked` with the list; there is an explicit force. Un-approving **clears
+  `published_at`**, which is what actually takes the public URL down.
+- `src/lib/data/editor.ts` → `getPublishedDeck()` — requires approved **and**
+  `published_at` **and** both slugs. That pairing is the entire access check,
+  since `/p/**` has no auth.
+- `src/app/p/[client]/[deck]/page.tsx` — the public route. Reuses `PresentDeck`
+  with `variant="public"`, which only drops the editor affordances so a client
+  never meets a second interface. `noindex` robots plus OG/Twitter tags for
+  email link previews.
+- `src/app/p/not-found.tsx` — the client-facing 404. Deliberately does not
+  distinguish "does not exist" from "unpublished", and links nowhere.
+- `src/components/PublishControl.tsx` — the editor-header control: three-step
+  status, editable public slug, blocking-issue list with "Publish anyway", and a
+  copy-link button that only appears once the link actually works.
+
+**`npm run test:publish`** asserts the Clerk matcher in both directions (`/p/**`
+public, editor and library never public, `auth.protect()` on everything else),
+that the public query requires approved + published, that un-approving clears
+the timestamp, that `noindex` is set, and it unit-tests the issue detector
+including decorative images and nested blocks.
+
+**One tradeoff taken:** `tsconfig.json` gains `allowImportingTsExtensions`, and
+`publish.ts` imports `./variables.ts` with the extension. Every other
+script-tested module is a leaf with type-only imports; `publish.ts` needs the
+variable resolver at runtime, and this was better than duplicating it. Safe with
+`noEmit`, but worth an eye on the first `next build`.
+
+**Still open before this is genuinely client-ready**
+
+1. `NEXT_PUBLIC_DECKS_ORIGIN` is read by `PublishControl` for the copyable link
+   and is **not set** — it falls back to `window.location.origin`, so the copied
+   link will say `presentations-untapped.vercel.app` rather than
+   `decks.loyaltyuntapped.com`. Set it in Vercel.
+2. The end-to-end accessibility pass across everything built today has not been
+   done. Individual pieces were reviewed as they were built; the sweep was not.
+3. Vercel is still on Hobby, which is licensed non-commercial (`PLAN.md` §8.2).
+
 ### Next
 
 `LIBRARIES.md` §9 step 5 — the media library on the shell, then companies (6),

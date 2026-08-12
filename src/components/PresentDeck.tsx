@@ -8,9 +8,26 @@ import type { EditorDeck } from "@/lib/data/editor";
 
 type Theme = "light" | "dark";
 
-/** `startIndex` supports "present from this slide" — see the split Present
- *  button in the editor. */
-export default function PresentDeck({ deck, startIndex = 0 }: { deck: EditorDeck; startIndex?: number }) {
+/**
+ * One presenter for internal rehearsal and for published client decks
+ * (PLAN.md §5.6) — a client should never have to learn a second interface, and
+ * we should never be debugging two renderers.
+ *
+ * `variant="public"` only removes the editor affordances: there is no deck to
+ * go back to, and the keyboard hints are internal shorthand. Everything about
+ * how the slides render is identical.
+ *
+ * `startIndex` supports "present from this slide" — see the split Present
+ * button in the editor.
+ */
+export default function PresentDeck({
+  deck, startIndex = 0, variant = "internal",
+}: {
+  deck: EditorDeck;
+  startIndex?: number;
+  variant?: "internal" | "public";
+}) {
+  const isPublic = variant === "public";
   const shellRef = useRef<HTMLElement>(null);
   const overviewCloseRef = useRef<HTMLButtonElement>(null);
   const [currentIndex, setCurrentIndex] = useState(startIndex);
@@ -113,14 +130,14 @@ export default function PresentDeck({ deck, startIndex = 0 }: { deck: EditorDeck
     </header>
 
     <nav className="present-controls" aria-label="Presentation controls" onClick={(event) => event.stopPropagation()}>
-      <Link href={`/decks/${deck.id}/edit/${slide.position}`} aria-label="Exit presentation">×</Link>
+      {!isPublic && <Link href={`/decks/${deck.id}/edit/${slide.position}`} aria-label="Exit presentation">×</Link>}
       <button type="button" onClick={previous} disabled={currentIndex === 0} aria-label="Previous slide">←</button>
       <button type="button" onClick={() => setOverview(true)} aria-label="Open slide overview">{currentIndex + 1} / {deck.slides.length}</button>
       <button type="button" onClick={next} disabled={currentIndex === deck.slides.length - 1} aria-label="Next slide">→</button>
       <button type="button" aria-pressed={theme === "dark"} onClick={() => chooseTheme(theme === "dark" ? "light" : "dark")} aria-label={`Use ${theme === "dark" ? "light" : "dark"} theme`}>{theme === "dark" ? "☀" : "◐"}</button>
       <button type="button" aria-pressed={fullscreen} onClick={() => void toggleFullscreen()} aria-label={fullscreen ? "Exit full screen" : "Enter full screen"}>{fullscreen ? "⊙" : "⛶"}</button>
     </nav>
-    <p className="present-shortcuts">← → or Space to navigate · G for overview · Esc to toggle overview</p>
+    <p className="present-shortcuts">{isPublic ? "← → or Space to move through the deck" : "← → or Space to navigate · G for overview · Esc to toggle overview"}</p>
     {fullscreenError && <p className="present-error" role="alert">{fullscreenError}</p>}
     <span className="sr-only" aria-live="polite">Slide {currentIndex + 1} of {deck.slides.length}</span>
 
