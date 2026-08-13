@@ -83,7 +83,7 @@ button, select { cursor: pointer; }
   gap: var(--space-3);
   color: var(--text-primary);
   font: var(--text-h3);
-  text-decoration: none;
+  text-decoration: none; 
 }
 
 .brand:hover { color: var(--text-primary); }
