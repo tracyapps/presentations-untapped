@@ -4,15 +4,16 @@
  * The companies library (LIBRARIES.md §4.1) — v1 slice.
  *
  * Super basic on purpose: identity fields and a deck count, browsable through
- * the same shared shell as the content block library. No detail page, no
- * contacts, no CRM linkage, no add/edit flow yet — companies are still created
- * inline from "New deck" (see CreateDeckForm). Those are real §4.1 scope, just
- * not this pass.
+ * the same shared shell as the content block library. Names link to
+ * CompanyDetail for editing; companies are still only ever *created* inline
+ * from "New deck" (see CreateDeckForm) — no standalone "add company" flow,
+ * and no contacts list yet. Those are real §4.1 scope, just not this pass.
  *
  * The list view is a plain table rather than the shared `DataTable` — that
  * component's checkbox column exists to drive bulk actions, and there are none
  * here yet. A selectable row that leads nowhere is worse than no checkbox.
  */
+import Link from "next/link";
 import LibraryShell from "./LibraryShell";
 import type { SortDef } from "./types";
 import type { CompanySummary } from "@/lib/data/companies";
@@ -43,7 +44,9 @@ function CompanyCard({ company }: { company: CompanySummary }) {
     <article className="lib-company-card">
       <CompanyLogo company={company} />
       <div>
-        <h2 className="lib-company-name">{company.name}</h2>
+        <h2 className="lib-company-name">
+          <Link className="lib-company-name-link" href={`/companies/${company.id}`}>{company.name}</Link>
+        </h2>
         <p className="lib-company-meta">
           <span>{company.industry ?? <span className="lib-muted">No industry set</span>}</span>
           <span aria-hidden="true">·</span>
@@ -77,7 +80,7 @@ function CompanyTable({ items }: { items: CompanySummary[] }) {
           <tbody>
             {items.map((item) => (
               <tr key={item.id}>
-                <th scope="row"><span className="lib-table-name">{item.name}</span></th>
+                <th scope="row"><Link className="lib-table-name" href={`/companies/${item.id}`}>{item.name}</Link></th>
                 <td>{item.industry ?? <span className="lib-muted">—</span>}</td>
                 <td>{item.website ? <a href={item.website} target="_blank" rel="noreferrer">{websiteLabel(item.website)}</a> : <span className="lib-muted">—</span>}</td>
                 <td data-align="end">{item.deckCount || <span className="lib-muted">—</span>}</td>
@@ -103,7 +106,7 @@ export default function CompanyLibrary({ items }: { items: CompanySummary[] }) {
     <LibraryShell<CompanySummary>
       breadcrumbs={[{ label: "Decks", href: "/decks" }, { label: "Companies" }]}
       title="Companies"
-      description="Every company with a deck, plus any added by hand. Open a company's decks from the dashboard search for now — a dedicated company page is next."
+      description="Every company with a deck, plus any added by hand. Open a company to edit its details or see its decks."
       items={items}
       storageKey="companies"
       searchText={(item) => [item.name, item.industry ?? "", item.website ?? ""].join(" ")}

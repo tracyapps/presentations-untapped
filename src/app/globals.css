@@ -701,6 +701,16 @@ button, select { cursor: pointer; }
 .lib-company-logo-placeholder { color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
 .lib-company-name { margin: 0; overflow-wrap: anywhere; font: var(--text-body); font-weight: 800; }
 .lib-company-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-secondary); font: var(--text-caption); }
+.lib-company-name-link { color: inherit; text-decoration: none; }
+.lib-company-name-link:hover { color: var(--accent-primary); text-decoration: underline; text-underline-offset: 3px; }
+
+/* --- Company detail/edit screen (LIBRARIES.md §4.1) -------------------- */
+.lib-logo-field { display: flex; align-items: center; gap: var(--space-3); }
+.lib-logo-field .lib-company-logo { width: 72px; height: 56px; flex: none; }
+.lib-logo-field input { flex: 1 1 auto; min-width: 0; }
+.lib-color-field { display: flex; align-items: center; gap: var(--space-3); }
+.lib-color-swatch { width: 32px; height: 32px; flex: none; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-page); }
+.lib-color-field input { flex: 1 1 auto; min-width: 0; }
 
 /* --- Shared table view ------------------------------------------------ */
 .lib-table-wrap { display: grid; gap: var(--space-3); }
@@ -921,7 +931,7 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
    navigation, same as before. */
 .slide-navigator.is-pages .slide-navigator-list { align-items: center; padding-block: var(--space-2); }
 .slide-pill { position: relative; display: inline-flex; align-items: stretch; }
-.slide-pill-nav { min-width: 34px; height: 34px; padding: 0 var(--space-2); display: grid; place-items: center; background: var(--bg-page); color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 850; line-height: 1; text-decoration: none; }
+.slide-pill-nav { min-width: 34px; height: 34px; padding: 0 var(--space-2); display: grid; place-items: center; background: var(--bg-page); color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 850; line-height: 2.75; text-align: center; text-decoration: none; }
 .slide-pill-nav.is-current { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
 .slide-pill:has(.slide-pill-toggle) .slide-pill-nav { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: 0; }
 .slide-pill-toggle { min-width: 20px; padding: 0 4px; display: grid; place-items: center; background: var(--accent-primary); color: var(--text-on-accent); border: 1px solid var(--accent-primary); border-left: 1px solid color-mix(in srgb, var(--text-on-accent) 35%, transparent); border-top-right-radius: var(--radius-pill); border-bottom-right-radius: var(--radius-pill); font-size: 0.6rem; line-height: 1; }
