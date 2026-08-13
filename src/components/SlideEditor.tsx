@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { BlockDropZone, isActiveTarget, type BlockDndController, type BlockDropTarget, useBlockDnd } from "@/components/BlockDnd";
 import {
@@ -677,7 +678,6 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
               </div>
             )}
           </div>
-          <Link className="button button-secondary" href="/decks" onClick={confirmNavigate}>Close</Link>
           <button className="button button-primary" type="button" onClick={() => void save()} disabled={!dirty || saveState === "saving" || saveState === "conflict"}>Save</button>
         </div>
       </header>
@@ -1000,6 +1000,32 @@ function SlideNavigator({ deckId, slides, currentSlideId, theme, view, onViewCha
   deletingDisabled: boolean;
 }) {
   const [pillMenuOpen, setPillMenuOpen] = useState(false);
+  const pillToggleRef = useRef<HTMLButtonElement>(null);
+  const [pillMenuPosition, setPillMenuPosition] = useState<{ top: number; left: number } | null>(null);
+
+  // The list this pill lives in scrolls horizontally (overflow-x: auto, which
+  // implies overflow-y: auto too), so a plain absolutely-positioned dropdown
+  // was being treated as scrollable overflow instead of floating above it —
+  // opening it made the whole row taller and scrollable. Portaling to
+  // <body> with a measured fixed position (same approach as IconTooltip)
+  // gets it out of that scroll container entirely.
+  useLayoutEffect(() => {
+    if (!pillMenuOpen) return;
+    function place() {
+      const trigger = pillToggleRef.current?.getBoundingClientRect();
+      if (!trigger) return;
+      setPillMenuPosition({ top: trigger.bottom + 4, left: trigger.left });
+    }
+    place();
+    const scrollOptions = { capture: true, passive: true } as const;
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, scrollOptions);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, scrollOptions);
+    };
+  }, [pillMenuOpen]);
+
   return <section className={`slide-navigator is-${view}`} aria-label="Slides">
     <div className="slide-navigator-heading">
       <strong>All slides</strong>
@@ -1024,17 +1050,27 @@ function SlideNavigator({ deckId, slides, currentSlideId, theme, view, onViewCha
               </Link>
               {isCurrent && <>
                 <button
+                  ref={pillToggleRef}
                   type="button" className="slide-pill-toggle"
                   aria-label={`Actions for slide ${slide.position}`} aria-haspopup="menu" aria-expanded={pillMenuOpen}
                   onClick={() => setPillMenuOpen((open) => !open)}
                 ><span aria-hidden="true">▾</span></button>
-                {pillMenuOpen && (
-                  <div className="slide-pill-menu" role="menu" onBlur={(event) => {
-                    if (!event.currentTarget.contains(event.relatedTarget as globalThis.Node)) setPillMenuOpen(false);
-                  }}>
+                {pillMenuOpen && createPortal(
+                  <div
+                    className="slide-pill-menu" role="menu"
+                    style={{
+                      top: pillMenuPosition?.top ?? -10_000,
+                      left: pillMenuPosition?.left ?? -10_000,
+                      visibility: pillMenuPosition ? "visible" : "hidden",
+                    }}
+                    onBlur={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget as globalThis.Node)) setPillMenuOpen(false);
+                    }}
+                  >
                     <button type="button" role="menuitem" onClick={() => { setPillMenuOpen(false); onDuplicate(); }}>⧉ Duplicate slide</button>
                     <button type="button" role="menuitem" className="is-danger" disabled={deletingDisabled} onClick={() => { setPillMenuOpen(false); onDelete(); }}>− Delete slide</button>
-                  </div>
+                  </div>,
+                  document.body,
                 )}
               </>}
             </div>

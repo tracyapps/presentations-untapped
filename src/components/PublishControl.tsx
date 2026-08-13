@@ -16,6 +16,7 @@
  */
 import { useEffect, useRef, useState, useTransition } from "react";
 import { setDeckSlugAction, setDeckStatusAction, type DeckStatus } from "@/app/decks/publish-actions";
+import { slugify } from "@/lib/slug";
 
 const LABEL: Record<DeckStatus, string> = {
   draft: "Draft",
@@ -157,7 +158,10 @@ export default function PublishControl({
                 <i>/p/{clientSlug}/</i>
                 <input
                   value={slug} maxLength={60}
-                  onChange={(event) => setSlug(event.target.value)}
+                  // Slugified live rather than only on save, so what is typed
+                  // and what actually gets linked never disagree with each
+                  // other — spaces become dashes right in the box.
+                  onChange={(event) => setSlug(slugify(event.target.value))}
                   onBlur={() => { if (slug !== deckSlug) saveSlug(); }}
                 />
               </span>

@@ -300,6 +300,18 @@ button, select { cursor: pointer; }
 .editor-branding span { color: var(--text-secondary); font: var(--text-caption); }
 .editor-actions { justify-content: flex-end; }
 .editor-actions .button { min-height: 40px; padding-inline: var(--space-4); }
+/* Present and Published are secondary to Save, and were the reason this whole
+   row got tight enough to overlap the tabs on a smaller screen. Closing (now
+   removed — the back arrow in the branding does that job) bought back some of
+   that room too; this buys back the rest without shrinking Save itself. */
+.editor-actions .publish-trigger,
+.editor-actions .editor-split .button,
+.editor-actions .editor-split-toggle {
+  min-height: 34px;
+  padding-inline: var(--space-3);
+  font: var(--text-caption);
+  font-weight: 750;
+}
 
 /* Split button, same shape as the block editor's save control. */
 .editor-split { position: relative; display: inline-flex; }
@@ -909,12 +921,15 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
    navigation, same as before. */
 .slide-navigator.is-pages .slide-navigator-list { align-items: center; padding-block: var(--space-2); }
 .slide-pill { position: relative; display: inline-flex; align-items: stretch; }
-.slide-pill-nav { min-width: 34px; height: 34px; padding: 0 var(--space-2); display: grid; place-items: center; background: var(--bg-page); color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 850; text-decoration: none; }
+.slide-pill-nav { min-width: 34px; height: 34px; padding: 0 var(--space-2); display: grid; place-items: center; background: var(--bg-page); color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 850; line-height: 1; text-decoration: none; }
 .slide-pill-nav.is-current { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
 .slide-pill:has(.slide-pill-toggle) .slide-pill-nav { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: 0; }
-.slide-pill-toggle { min-width: 20px; padding: 0 4px; display: grid; place-items: center; background: var(--accent-primary); color: var(--text-on-accent); border: 1px solid var(--accent-primary); border-left: 1px solid color-mix(in srgb, var(--text-on-accent) 35%, transparent); border-top-right-radius: var(--radius-pill); border-bottom-right-radius: var(--radius-pill); font-size: 0.6rem; }
+.slide-pill-toggle { min-width: 20px; padding: 0 4px; display: grid; place-items: center; background: var(--accent-primary); color: var(--text-on-accent); border: 1px solid var(--accent-primary); border-left: 1px solid color-mix(in srgb, var(--text-on-accent) 35%, transparent); border-top-right-radius: var(--radius-pill); border-bottom-right-radius: var(--radius-pill); font-size: 0.6rem; line-height: 1; }
 .slide-pill-toggle:hover { background: var(--accent-primary-hover); }
-.slide-pill-menu { position: absolute; z-index: 15; top: calc(100% + var(--space-1)); left: 0; display: grid; gap: 2px; min-width: 170px; padding: var(--space-2); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); text-align: left; }
+/* Fixed and portaled to <body> (see SlideNavigator) rather than absolute
+   inside the pill — the slide list scrolls, and an absolutely-positioned menu
+   was being folded into that scrollable area instead of floating above it. */
+.slide-pill-menu { position: fixed; z-index: 1000; display: grid; gap: 2px; min-width: 170px; padding: var(--space-2); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); text-align: left; }
 .slide-pill-menu button { padding: var(--space-2); background: transparent; color: var(--text-primary); border: 0; border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; text-align: left; }
 .slide-pill-menu button:hover:not(:disabled) { background: var(--bg-surface-raised); }
 .slide-pill-menu button.is-danger { color: var(--status-danger); }
@@ -1517,7 +1532,7 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .publish-trigger.is-in_review .publish-dot { background: var(--status-warning); }
 .publish-trigger.is-approved .publish-dot { background: var(--status-success); }
 
-.publish-panel { position: absolute; z-index: 40; top: calc(100% + var(--space-2)); right: 0; display: grid; gap: var(--space-4); width: min(400px, 90vw); padding: var(--space-4); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.publish-panel { position: absolute; z-index: 40; top: calc(100% + var(--space-2)); right: 0; display: grid; gap: var(--space-4); width: min(420px, 92vw); padding: var(--space-4); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
 .publish-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 2px; background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
 .publish-step { min-height: 32px; padding: 0 var(--space-2); background: transparent; color: var(--text-secondary); border: 0; border-radius: calc(var(--radius-sm) - 2px); font: var(--text-caption); font-weight: 800; }
 .publish-step:hover:not([data-disabled]):not(.is-current) { color: var(--text-primary); }
@@ -1539,8 +1554,12 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .publish-slug i { flex: none; padding: 0 0 0 var(--space-2); color: var(--text-secondary); font-style: normal; }
 .publish-slug input { flex: 1; min-width: 0; min-height: 34px; padding: 0 var(--space-2); background: transparent; color: var(--text-primary); border: 0; font: var(--text-caption); }
 .publish-slug input:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
-.publish-live { display: flex; align-items: center; gap: var(--space-2); }
-.publish-live a { min-width: 0; overflow: hidden; color: var(--link-color); font: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+/* Wraps instead of truncating — a client's slug plus the deck slug can run
+   long, and an ellipsis still let the row overflow its own panel. Letting the
+   link break onto a second line is what actually stays inside the box at any
+   width. */
+.publish-live { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.publish-live a { min-width: 0; flex: 1 1 auto; color: var(--link-color); font: var(--text-caption); overflow-wrap: anywhere; }
 .publish-live button { flex: none; min-height: 30px; padding: 0 var(--space-3); background: var(--bg-page); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; }
 .publish-live button:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
 .publish-hint { margin: 0; color: var(--text-secondary); font: var(--text-caption); line-height: 1.5; }
