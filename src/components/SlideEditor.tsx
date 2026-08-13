@@ -33,10 +33,8 @@ type AddLayoutView = "large" | "compact";
 type EditorPanelLayout = {
   resourceWidth: number;
   inspectorWidth: number;
-  slideRowHeight: number;
   resourceVisible: boolean;
   inspectorVisible: boolean;
-  slidesVisible: boolean;
 };
 type TextNode = Extract<ContentNode, { type: "title" | "tagline" | "blockquote" | "callout" | "paragraph" }>;
 
@@ -48,16 +46,17 @@ const PANEL_LAYOUT_KEY = "lu-editor-panel-layout-v1";
 const DEFAULT_PANEL_LAYOUT: EditorPanelLayout = {
   resourceWidth: 260,
   inspectorWidth: 230,
-  slideRowHeight: 188,
   resourceVisible: true,
   inspectorVisible: true,
-  slidesVisible: true,
 };
 const PANEL_LIMITS = {
   resourceWidth: [190, 420],
   inspectorWidth: [190, 380],
-  slideRowHeight: [116, 280],
 } as const;
+/** How long a passing status notice (e.g. "Added X to slide 3") stays up
+ *  before it clears itself. Long enough to read, short enough that it does
+ *  not sit there forever the way an un-dismissed toast used to. */
+const NOTICE_TIMEOUT_MS = 4500;
 const DEFAULT_PALETTE_STATE: Record<PaletteSection, boolean> = {
   layouts: true,
   design: true,
@@ -174,10 +173,8 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
       if (savedPanels) setPanelLayout({
         resourceWidth: clamp(Number(savedPanels.resourceWidth) || DEFAULT_PANEL_LAYOUT.resourceWidth, ...PANEL_LIMITS.resourceWidth),
         inspectorWidth: clamp(Number(savedPanels.inspectorWidth) || DEFAULT_PANEL_LAYOUT.inspectorWidth, ...PANEL_LIMITS.inspectorWidth),
-        slideRowHeight: clamp(Number(savedPanels.slideRowHeight) || DEFAULT_PANEL_LAYOUT.slideRowHeight, ...PANEL_LIMITS.slideRowHeight),
         resourceVisible: savedPanels.resourceVisible ?? true,
         inspectorVisible: savedPanels.inspectorVisible ?? true,
-        slidesVisible: savedPanels.slidesVisible ?? true,
       });
     } catch {
       localStorage.removeItem(PANEL_LAYOUT_KEY);
@@ -264,6 +261,15 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
   }, [hasUnsavedChanges]);
+
+  // Only the standalone toast auto-dismisses. While the "save to library"
+  // dialog is open, this same state renders as its inline form error instead
+  // (see the dialog below) — that one stays until the person acts on it.
+  useEffect(() => {
+    if (!libraryNotice || libraryTarget) return;
+    const timer = window.setTimeout(() => setLibraryNotice(""), NOTICE_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [libraryNotice, libraryTarget]);
 
   function updateText(id: string, text: string) {
     if (saveState !== "conflict") {
@@ -369,6 +375,10 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   function removeBlock(node: Node) {
     if (!window.confirm(`Delete this ${node.type} block?`)) return;
     markDoc(deleteNode(docRef.current, node.id));
+  }
+
+  function duplicateBlock(node: Node) {
+    markDoc(duplicateNode(docRef.current, node.id));
   }
 
   function dropBlock(sourceId: string, target: BlockDropTarget) {
@@ -632,11 +642,6 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
           ))}
         </nav>
         <div className="editor-actions">
-          <div className="editor-panel-toggles" role="group" aria-label="Workspace panels">
-            <button type="button" aria-label="Toggle add slide panel" title="Add slide and libraries" aria-pressed={panelLayout.resourceVisible} onClick={() => updatePanelLayout({ resourceVisible: !panelLayout.resourceVisible })}>▧</button>
-            <button type="button" aria-label="Toggle slide controls panel" title="Content and slide design" aria-pressed={panelLayout.inspectorVisible} onClick={() => updatePanelLayout({ inspectorVisible: !panelLayout.inspectorVisible })}>◫</button>
-            <button type="button" aria-label="Toggle slides row" title="Slide navigator" aria-pressed={panelLayout.slidesVisible} onClick={() => updatePanelLayout({ slidesVisible: !panelLayout.slidesVisible })}>▤</button>
-          </div>
           <span className={`save-state save-state-${visibleSaveState}`} aria-live="polite">{stateLabel[visibleSaveState]}</span>
           <PublishControl
             deckId={deck.id}
@@ -678,14 +683,27 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
       </header>
 
       {message && <div className={`editor-message editor-message-${saveState}`} role="alert">{message}{saveState === "conflict" && <button type="button" onClick={() => window.location.reload()}>Refresh slide</button>}</div>}
-      {libraryNotice && !libraryTarget && <div className="editor-message editor-message-success" role="status">{libraryNotice}</div>}
+
+      {/* Left side, close to the panels they control — the icon-only versions
+          of these buttons used to live in the header, which is also what was
+          overlapping the tabs. This same strip doubles as the toast slot: a
+          passing notice overlays the buttons instead of pushing the layout
+          down, and it clears itself instead of sitting there indefinitely. */}
+      <div className="editor-rail-toolbar">
+        <button type="button" className="editor-rail-toggle" aria-pressed={panelLayout.resourceVisible} onClick={() => updatePanelLayout({ resourceVisible: !panelLayout.resourceVisible })}>
+          {panelLayout.resourceVisible ? "Hide library" : "Show library"}
+        </button>
+        <button type="button" className="editor-rail-toggle" aria-pressed={panelLayout.inspectorVisible} onClick={() => updatePanelLayout({ inspectorVisible: !panelLayout.inspectorVisible })}>
+          {panelLayout.inspectorVisible ? "Hide slide" : "Show slide"}
+        </button>
+        {libraryNotice && !libraryTarget && <div className="editor-message editor-message-success is-overlay" role="status">{libraryNotice}</div>}
+      </div>
 
       <div
         className="editor-body"
         style={{
           "--editor-resource-width": `${panelLayout.resourceVisible ? panelLayout.resourceWidth : 0}px`,
           "--editor-inspector-width": `${panelLayout.inspectorVisible ? panelLayout.inspectorWidth : 0}px`,
-          "--editor-slide-row-height": `${panelLayout.slidesVisible ? panelLayout.slideRowHeight : 0}px`,
         } as React.CSSProperties}
       >
         {panelLayout.resourceVisible && <aside className="resource-palette" aria-label="Reusable blocks and media">
@@ -814,8 +832,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
         </aside>}
         {panelLayout.inspectorVisible && <ResizeHandle orientation="vertical" className="inspector-resize-handle" label="Resize slide controls panel" value={panelLayout.inspectorWidth} min={PANEL_LIMITS.inspectorWidth[0]} max={PANEL_LIMITS.inspectorWidth[1]} resetValue={DEFAULT_PANEL_LAYOUT.inspectorWidth} onChange={(inspectorWidth) => updatePanelLayout({ inspectorWidth })} />}
 
-        {panelLayout.slidesVisible && <SlideNavigator deckId={deck.id} slides={navigationSlides} currentSlideId={initialSlide.id} theme={previewTheme} view={slideNavView} onViewChange={(value) => { setSlideNavView(value); localStorage.setItem(SLIDE_NAV_VIEW_KEY, value); }} onNavigate={confirmNavigate} onDuplicate={duplicateCurrentSlide} onDelete={deleteCurrentSlide} onHide={() => updatePanelLayout({ slidesVisible: false })} deletingDisabled={isAdding || deck.slides.length === 1} />}
-        {panelLayout.slidesVisible && <ResizeHandle orientation="horizontal" className="slides-resize-handle" label="Resize slides row" value={panelLayout.slideRowHeight} min={PANEL_LIMITS.slideRowHeight[0]} max={PANEL_LIMITS.slideRowHeight[1]} resetValue={DEFAULT_PANEL_LAYOUT.slideRowHeight} onChange={(slideRowHeight) => updatePanelLayout({ slideRowHeight })} />}
+        <SlideNavigator deckId={deck.id} slides={navigationSlides} currentSlideId={initialSlide.id} theme={previewTheme} view={slideNavView} onViewChange={(value) => { setSlideNavView(value); localStorage.setItem(SLIDE_NAV_VIEW_KEY, value); }} onNavigate={confirmNavigate} onDuplicate={duplicateCurrentSlide} onDelete={deleteCurrentSlide} deletingDisabled={isAdding || deck.slides.length === 1} />
 
         <section className="editor-workspace">
           <div className="editor-context">
@@ -824,7 +841,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
           </div>
           {tab === "design" && <div className="design-workspace"><SlideCanvas doc={doc} theme={previewTheme} editor={{
             onDelete: removeBlock,
-            onDuplicate: (node) => markDoc(duplicateNode(docRef.current, node.id)),
+            onDuplicate: duplicateBlock,
             onMove: (node, direction) => markDoc(moveNode(docRef.current, node.id, direction)),
             onDrop: dropBlock,
             onSaveToLibrary: openLibraryDialog,
@@ -840,7 +857,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             onUpdateSurface: (id, surface) => setNodeSurface(id, surface),
             onSwapColumns: swapColumns,
           }} /></div>}
-          {tab === "outline" && <div className="outline-workspace"><OutlineTree nodes={doc.blocks} media={{ items: mediaItems, onOpen: setMediaTargetId, onAssign: assignMediaToImage }} onText={updateText} onUpdate={updateNode} onMove={dropBlock} onSwapColumns={(id) => markDoc(swapLayoutChildren(docRef.current, id))} /></div>}
+          {tab === "outline" && <div className="outline-workspace"><OutlineTree nodes={doc.blocks} media={{ items: mediaItems, onOpen: setMediaTargetId, onAssign: assignMediaToImage }} onText={updateText} onUpdate={updateNode} onMove={dropBlock} onSwapColumns={(id) => markDoc(swapLayoutChildren(docRef.current, id))} onDuplicate={duplicateBlock} onDelete={removeBlock} /></div>}
           <div hidden={tab !== "voiceover"}><VoiceoverEditor deckId={deck.id} slideId={initialSlide.id} configured={mediaLibrary.configured} initialVoiceover={initialSlide.voiceover} active={tab === "voiceover"} onDirtyChange={setVoiceoverDirty} /></div>
         </section>
       </div>
@@ -961,7 +978,16 @@ function ResizeHandle({ orientation, className, label, value, min, max, resetVal
   ><span aria-hidden="true" /></div>;
 }
 
-function SlideNavigator({ deckId, slides, currentSlideId, theme, view, onViewChange, onNavigate, onDuplicate, onDelete, onHide, deletingDisabled }: {
+/**
+ * Duplicate/delete act on whichever slide is currently open in the workspace
+ * below — there is no per-slide id plumbed through here, on purpose (see the
+ * "current slide only" call in the design pass). So the controls for them
+ * only ever appear on the current slide's tile: an overlay in the large and
+ * compact views, and a split-button dropdown on its pill in the numbers view.
+ * Proximity is the whole point — it should be obvious which slide either
+ * button acts on without reading a label.
+ */
+function SlideNavigator({ deckId, slides, currentSlideId, theme, view, onViewChange, onNavigate, onDuplicate, onDelete, deletingDisabled }: {
   deckId: string;
   slides: EditorSlide[];
   currentSlideId: string;
@@ -971,29 +997,66 @@ function SlideNavigator({ deckId, slides, currentSlideId, theme, view, onViewCha
   onNavigate: (event: React.MouseEvent) => void;
   onDuplicate: () => void;
   onDelete: () => void;
-  onHide: () => void;
   deletingDisabled: boolean;
 }) {
+  const [pillMenuOpen, setPillMenuOpen] = useState(false);
   return <section className={`slide-navigator is-${view}`} aria-label="Slides">
-    <div className="slide-navigator-heading"><strong>Slides</strong><span>{slides.length}</span><button type="button" onClick={onHide} aria-label="Hide slides row" title="Hide slides row">⌃</button></div>
+    <div className="slide-navigator-heading">
+      <strong>All slides</strong>
+      <span>{slides.length}</span>
+      <PanelViewToggle label="Slide navigator view" value={view} options={[{ value: "large", label: "Large thumbnails", icon: "▣" }, { value: "compact", label: "Compact slides", icon: "▤" }, { value: "pages", label: "Slide numbers", icon: "•••" }]} onChange={onViewChange} />
+    </div>
     <ol className="slide-navigator-list">
       {slides.map((slide) => {
         const layout = LAYOUTS.find((item) => item.key === slide.layoutKey);
+        const isCurrent = slide.id === currentSlideId;
+
+        if (view === "pages") {
+          return <li key={slide.id}>
+            <div className="slide-pill">
+              <Link
+                className={`slide-pill-nav${isCurrent ? " is-current" : ""}`}
+                href={`/decks/${deckId}/edit/${slide.position}`}
+                aria-current={isCurrent ? "page" : undefined}
+                onClick={(event) => { setPillMenuOpen(false); onNavigate(event); }}
+              >
+                {slide.position}
+              </Link>
+              {isCurrent && <>
+                <button
+                  type="button" className="slide-pill-toggle"
+                  aria-label={`Actions for slide ${slide.position}`} aria-haspopup="menu" aria-expanded={pillMenuOpen}
+                  onClick={() => setPillMenuOpen((open) => !open)}
+                ><span aria-hidden="true">▾</span></button>
+                {pillMenuOpen && (
+                  <div className="slide-pill-menu" role="menu" onBlur={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget as globalThis.Node)) setPillMenuOpen(false);
+                  }}>
+                    <button type="button" role="menuitem" onClick={() => { setPillMenuOpen(false); onDuplicate(); }}>⧉ Duplicate slide</button>
+                    <button type="button" role="menuitem" className="is-danger" disabled={deletingDisabled} onClick={() => { setPillMenuOpen(false); onDelete(); }}>− Delete slide</button>
+                  </div>
+                )}
+              </>}
+            </div>
+          </li>;
+        }
+
         return <li key={slide.id}>
-          <Link className={slide.id === currentSlideId ? "is-current" : ""} href={`/decks/${deckId}/edit/${slide.position}`} aria-current={slide.id === currentSlideId ? "page" : undefined} onClick={onNavigate}>
-            {view === "pages" ? <span className="slide-page-number">{slide.position}</span> : <>
-              <span className="slide-nav-number">{slide.position}</span>
-              <div className="slide-nav-preview"><SlideCanvas doc={slide.blocks} theme={theme} /></div>
-              {view === "compact" && <div className="slide-nav-meta"><span dangerouslySetInnerHTML={{ __html: layout?.preview ?? "" }} aria-hidden="true" /><strong>{layout?.name ?? slide.layoutKey}</strong></div>}
-            </>}
+          <Link className={isCurrent ? "is-current" : ""} href={`/decks/${deckId}/edit/${slide.position}`} aria-current={isCurrent ? "page" : undefined} onClick={onNavigate}>
+            <span className="slide-nav-number">{slide.position}</span>
+            <div className="slide-nav-preview"><SlideCanvas doc={slide.blocks} theme={theme} /></div>
+            {view === "compact" && <div className="slide-nav-meta"><span dangerouslySetInnerHTML={{ __html: layout?.preview ?? "" }} aria-hidden="true" /><strong>{layout?.name ?? slide.layoutKey}</strong></div>}
           </Link>
+          {/* Siblings of the Link, not children of it — buttons nested inside
+              an anchor are the most common accessibility break in this exact
+              pattern (LIBRARIES.md §3.4). */}
+          {isCurrent && <div className="slide-nav-overlay">
+            <button type="button" className="button button-secondary button-tight" onClick={onDuplicate}>⧉ <span>Duplicate</span></button>
+            <button type="button" className="button button-danger button-tight" onClick={onDelete} disabled={deletingDisabled}>− <span>Delete</span></button>
+          </div>}
         </li>;
       })}
     </ol>
-    <footer className="slide-navigator-footer">
-      <div className="slide-navigator-actions"><button type="button" onClick={onDuplicate} aria-label="Duplicate current slide">⧉ <span>Duplicate</span></button><button type="button" onClick={onDelete} disabled={deletingDisabled} aria-label="Delete current slide">− <span>Delete</span></button></div>
-      <PanelViewToggle label="Slide navigator view" value={view} options={[{ value: "large", label: "Large thumbnails", icon: "▣" }, { value: "compact", label: "Compact slides", icon: "▤" }, { value: "pages", label: "Slide numbers", icon: "•••" }]} onChange={onViewChange} />
-    </footer>
   </section>;
 }
 
@@ -1018,25 +1081,25 @@ function PatternSwatches({ value, onChange }: { value: SlidePatternChoice; onCha
 
 type OutlineMedia = { items: MediaAsset[]; onOpen: (id: string) => void; onAssign: (id: string, asset: MediaAsset) => void };
 
-function OutlineTree({ nodes, media, onText, onUpdate, onMove, onSwapColumns }: { nodes: Node[]; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onMove: (sourceId: string, target: BlockDropTarget) => void; onSwapColumns: (id: string) => void }) {
+function OutlineTree({ nodes, media, onText, onUpdate, onMove, onSwapColumns, onDuplicate, onDelete }: { nodes: Node[]; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onMove: (sourceId: string, target: BlockDropTarget) => void; onSwapColumns: (id: string) => void; onDuplicate: (node: Node) => void; onDelete: (node: Node) => void }) {
   const dnd = useBlockDnd(onMove);
-  return <OutlineNodes nodes={nodes} parentId={null} media={media} onText={onText} onUpdate={onUpdate} onSwapColumns={onSwapColumns} dnd={dnd} />;
+  return <OutlineNodes nodes={nodes} parentId={null} media={media} onText={onText} onUpdate={onUpdate} onSwapColumns={onSwapColumns} onDuplicate={onDuplicate} onDelete={onDelete} dnd={dnd} />;
 }
 
-function OutlineNodes({ nodes, parentId, media, onText, onUpdate, onSwapColumns, dnd }: { nodes: Node[]; parentId: string | null; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSwapColumns: (id: string) => void; dnd: BlockDndController }) {
+function OutlineNodes({ nodes, parentId, media, onText, onUpdate, onSwapColumns, onDuplicate, onDelete, dnd }: { nodes: Node[]; parentId: string | null; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSwapColumns: (id: string) => void; onDuplicate: (node: Node) => void; onDelete: (node: Node) => void; dnd: BlockDndController }) {
   if (!nodes.length) return <div className="outline-nodes is-empty-drop-container"><BlockDropZone axis="vertical" controller={dnd} target={{ parentId, index: 0 }} /></div>;
   return <div className="outline-nodes">{nodes.map((node, index) => {
     const before = { parentId, index };
     const after = { parentId, index: index + 1 };
     return <div className={`outline-node-slot${isActiveTarget(dnd, before) ? " is-target-before" : ""}${index === nodes.length - 1 && isActiveTarget(dnd, after) ? " is-target-after" : ""}`} key={node.id}>
       <BlockDropZone axis="vertical" controller={dnd} target={before} />
-      <OutlineNode node={node} media={media} onText={onText} onUpdate={onUpdate} onSwapColumns={onSwapColumns} dnd={dnd} />
+      <OutlineNode node={node} media={media} onText={onText} onUpdate={onUpdate} onSwapColumns={onSwapColumns} onDuplicate={onDuplicate} onDelete={onDelete} dnd={dnd} />
       {index === nodes.length - 1 && <BlockDropZone axis="vertical" controller={dnd} target={after} />}
     </div>;
   })}</div>;
 }
 
-function OutlineDragHeader({ node, dnd, onSwapColumns }: { node: Node; dnd: BlockDndController; onSwapColumns?: (id: string) => void }) {
+function OutlineDragHeader({ node, dnd, onSwapColumns, onDuplicate, onDelete }: { node: Node; dnd: BlockDndController; onSwapColumns?: (id: string) => void; onDuplicate: (node: Node) => void; onDelete: (node: Node) => void }) {
   return <header
     className="outline-block-header"
     draggable
@@ -1048,17 +1111,21 @@ function OutlineDragHeader({ node, dnd, onSwapColumns }: { node: Node; dnd: Bloc
   >
     <span className="outline-drag-handle" aria-hidden="true">⠿</span>
     <h3>{node.type}</h3>
-    {isLayout(node) && node.type === "columns" && node.children.length > 1 && onSwapColumns && <button type="button" onClick={() => onSwapColumns(node.id)}>⇄ Swap columns</button>}
+    <div className="outline-block-actions">
+      {isLayout(node) && node.type === "columns" && node.children.length > 1 && onSwapColumns && <button type="button" onClick={() => onSwapColumns(node.id)}>⇄ Swap columns</button>}
+      <button type="button" onClick={() => onDuplicate(node)} aria-label={`Duplicate ${node.type} block`}>⧉ Duplicate</button>
+      <button type="button" className="is-danger" onClick={() => onDelete(node)} aria-label={`Delete ${node.type} block`}>× Delete</button>
+    </div>
   </header>;
 }
 
-function OutlineNode({ node, media, onText, onUpdate, onSwapColumns, dnd }: { node: Node; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSwapColumns: (id: string) => void; dnd: BlockDndController }) {
+function OutlineNode({ node, media, onText, onUpdate, onSwapColumns, onDuplicate, onDelete, dnd }: { node: Node; media: OutlineMedia; onText: (id: string, text: string) => void; onUpdate: (id: string, update: (node: ContentNode) => ContentNode) => void; onSwapColumns: (id: string) => void; onDuplicate: (node: Node) => void; onDelete: (node: Node) => void; dnd: BlockDndController }) {
   if (isLayout(node)) {
-    return <section className={`outline-layout${dnd.draggingId === node.id ? " is-dragging" : ""}`} aria-label={`${node.type} layout`}><OutlineDragHeader node={node} dnd={dnd} onSwapColumns={onSwapColumns} /><OutlineNodes nodes={node.children} parentId={node.id} media={media} onText={onText} onUpdate={onUpdate} onSwapColumns={onSwapColumns} dnd={dnd} /></section>;
+    return <section className={`outline-layout${dnd.draggingId === node.id ? " is-dragging" : ""}`} aria-label={`${node.type} layout`}><OutlineDragHeader node={node} dnd={dnd} onSwapColumns={onSwapColumns} onDuplicate={onDuplicate} onDelete={onDelete} /><OutlineNodes nodes={node.children} parentId={node.id} media={media} onText={onText} onUpdate={onUpdate} onSwapColumns={onSwapColumns} onDuplicate={onDuplicate} onDelete={onDelete} dnd={dnd} /></section>;
   }
   return (
     <section className={`outline-block${dnd.draggingId === node.id ? " is-dragging" : ""}`}>
-      <OutlineDragHeader node={node} dnd={dnd} />
+      <OutlineDragHeader node={node} dnd={dnd} onDuplicate={onDuplicate} onDelete={onDelete} />
       {isTextNode(node) && <RichTextEditor node={node} onText={onText} />}
       {node.type === "blockquote" && <Field label="Attribution" value={node.props.attribution ?? ""} onChange={(value) => onUpdate(node.id, (current) => current.type === "blockquote" ? { ...current, props: { ...current.props, attribution: value } } : current)} />}
       {node.type === "image" && <>

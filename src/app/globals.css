@@ -311,10 +311,6 @@ button, select { cursor: pointer; }
 .editor-split-menu strong { font: var(--text-body-sm); font-weight: 750; }
 .editor-split-menu span { color: var(--text-secondary); font: var(--text-caption); }
 
-.editor-panel-toggles { display: flex; gap: 2px; padding: 2px; background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
-.editor-panel-toggles button { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; background: transparent; color: var(--text-secondary); border: 0; border-radius: 4px; font: var(--text-caption); }
-.editor-panel-toggles button[aria-pressed="true"] { background: var(--bg-surface-raised); color: var(--accent-primary); box-shadow: var(--shadow-sm); }
-
 .editor-tabs {
   display: flex;
   gap: var(--space-1);
@@ -343,8 +339,20 @@ button, select { cursor: pointer; }
 .editor-message-success { background: var(--bg-teal-soft); color: var(--text-primary); }
 .editor-message button { border: 0; background: transparent; color: inherit; font-weight: 800; text-decoration: underline; }
 
+/* The library/slide panel toggles used to be icon buttons crowded into the
+   header, where they were overlapping the tabs. Living here instead — a thin
+   strip on the left, right above the panels they control — solves both: no
+   more crowding, and the buttons sit exactly where their effect happens. This
+   is also the toast's new home: an ephemeral notice overlays the buttons
+   rather than pushing the page down, and (unlike the old toast) clears itself. */
+.editor-rail-toolbar { position: relative; display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-5); background: var(--bg-page); border-bottom: 1px solid var(--border-default); }
+.editor-rail-toggle { padding: var(--space-1) var(--space-3); background: var(--bg-surface); color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 750; }
+.editor-rail-toggle:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.editor-rail-toggle[aria-pressed="false"] { color: var(--accent-primary); border-color: var(--accent-primary); }
+.editor-message.is-overlay { position: absolute; inset: 0; z-index: 5; margin: 0; }
+
 .editor-body {
-  position: relative; --editor-resource-width: 260px; --editor-inspector-width: 230px; --editor-slide-row-height: 188px; position: relative; min-height: calc(100vh - 72px); display: grid; grid-template-columns: var(--editor-resource-width) var(--editor-inspector-width) minmax(0, 1fr); grid-template-rows: var(--editor-slide-row-height) minmax(0, 1fr); }
+  position: relative; --editor-resource-width: 260px; --editor-inspector-width: 230px; position: relative; min-height: calc(100vh - 72px); display: grid; grid-template-columns: var(--editor-resource-width) var(--editor-inspector-width) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
 .resource-palette, .block-palette { min-height: 0; display: grid; align-content: start; gap: var(--space-2); padding: var(--space-4); background: var(--bg-surface); border-right: 1px solid var(--border-default); overflow-y: auto; }
 .resource-palette { grid-row: 1 / -1; grid-column: 1; }
 .block-palette { grid-row: 1 / -1; grid-column: 2; }
@@ -375,8 +383,6 @@ button, select { cursor: pointer; }
 .resource-resize-handle { grid-column: 1; }
 .inspector-resize-handle { grid-column: 2; }
 .resource-resize-handle::before, .inspector-resize-handle::before { inset: 0 4px; width: 2px; }
-.slides-resize-handle { width: 100%; height: 10px; grid-column: 3; grid-row: 1; align-self: end; cursor: row-resize; }
-.slides-resize-handle::before { inset: 4px 0; height: 2px; }
 .is-resizing-editor { user-select: none; }
 .palette-text-action { padding: 0; background: transparent; color: var(--accent-primary); border: 0; font: var(--text-caption); font-weight: 750; white-space: nowrap; }
 .palette-section { display: grid; border-bottom: 1px solid var(--border-default); }
@@ -675,6 +681,15 @@ button, select { cursor: pointer; }
 .lib-block-tags { display: flex; flex-wrap: wrap; gap: var(--space-1); margin: 0; position: relative; z-index: 2; }
 .lib-block-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-secondary); font: var(--text-caption); }
 
+/* --- Company library cards (LIBRARIES.md §4.1, v1 slice) --------------- */
+.lib-company-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-4); }
+.lib-company-card { position: relative; display: grid; gap: var(--space-3); padding: var(--space-4); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+.lib-company-logo { display: grid; place-items: center; height: 72px; background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); overflow: hidden; }
+.lib-company-logo img { max-width: 80%; max-height: 60%; object-fit: contain; }
+.lib-company-logo-placeholder { color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.lib-company-name { margin: 0; overflow-wrap: anywhere; font: var(--text-body); font-weight: 800; }
+.lib-company-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; color: var(--text-secondary); font: var(--text-caption); }
+
 /* --- Shared table view ------------------------------------------------ */
 .lib-table-wrap { display: grid; gap: var(--space-3); }
 .lib-table-tools { display: flex; justify-content: flex-end; }
@@ -844,13 +859,19 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .library-card-body form > div { display: flex; justify-content: flex-end; gap: var(--space-2); }
 .library-card-body form .button { min-height: 36px; padding-inline: var(--space-3); font: var(--text-caption); font-weight: 750; }
 
-.slide-navigator { min-width: 0; min-height: 0; grid-column: 3; grid-row: 1; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-3); overflow: hidden; padding: var(--space-3) var(--space-4); background: var(--bg-surface); border-bottom: 1px solid var(--border-default); }
-.slide-navigator-heading { display: flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
-.slide-navigator-heading > span { min-width: 20px; padding: 2px 6px; background: var(--bg-surface-raised); border-radius: var(--radius-pill); text-align: center; }
-.slide-navigator-heading > button { width: 26px; height: 26px; padding: 0; background: transparent; color: var(--text-secondary); border: 0; border-radius: var(--radius-sm); }
-.slide-navigator-heading > button:hover { background: var(--bg-surface-raised); color: var(--text-primary); }
-.slide-navigator-list { grid-column: 2; display: flex; gap: var(--space-3); min-width: 0; margin: 0; padding: 2px 2px var(--space-2); overflow-x: auto; list-style: none; scroll-snap-type: x proximity; }
-.slide-navigator-list li { flex: none; scroll-snap-align: start; }
+/* No fixed/resizable row height any more — now that the footer controls are
+   gone (duplicate/delete moved onto the current slide's own tile, view switch
+   moved into this header), nothing needs slack space below the thumbnails, so
+   the row is exactly as tall as whichever view is showing. */
+.slide-navigator { min-width: 0; min-height: 0; grid-column: 3; grid-row: 1; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; background: var(--bg-surface); border-bottom: 1px solid var(--border-default); }
+/* Same treatment as the Library/Slide rail headers, so all three read as one
+   family — just with the view switch riding on the right, since this is also
+   where it needs to live (far right of "All slides", per the design pass). */
+.slide-navigator-heading { display: flex; align-items: center; gap: var(--space-2); min-height: 26px; padding: 0 var(--space-3); background: color-mix(in srgb, var(--accent-primary) 16%, var(--bg-surface)); color: var(--accent-primary); border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent); font: var(--text-caption); font-weight: 850; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.slide-navigator-heading > span { min-width: 20px; padding: 2px 6px; background: var(--bg-surface-raised); color: var(--text-secondary); border-radius: var(--radius-pill); text-align: center; letter-spacing: normal; text-transform: none; }
+.slide-navigator-heading .panel-view-toggle { margin-top: 0; margin-left: auto; }
+.slide-navigator-list { display: flex; gap: var(--space-3); min-width: 0; margin: 0; padding: var(--space-3) var(--space-4); overflow-x: auto; list-style: none; scroll-snap-type: x proximity; }
+.slide-navigator-list li { position: relative; flex: none; scroll-snap-align: start; }
 .slide-navigator-list a { position: relative; display: block; color: var(--text-secondary); text-decoration: none; }
 .slide-nav-preview { width: 176px; aspect-ratio: 16 / 9; overflow: hidden; border: 2px solid transparent; border-radius: var(--radius-sm); box-shadow: var(--shadow-sm); pointer-events: none; }
 .slide-navigator-list a.is-current .slide-nav-preview { border-color: var(--accent-primary); box-shadow: 0 0 0 1px var(--accent-primary), var(--shadow-sm); }
@@ -864,11 +885,6 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .slide-nav-preview .slide-process { --process-marker-size: 0.8rem; gap: 2px; }
 .slide-nav-preview .slide-process li small, .slide-nav-preview .slide-data-table { font-size: 0.34rem; }
 .slide-nav-number { position: absolute; top: var(--space-1); left: var(--space-1); z-index: 10; min-width: 24px; padding: 2px var(--space-1); background: color-mix(in srgb, var(--bg-page) 88%, transparent); color: var(--text-primary); border-radius: var(--radius-pill); box-shadow: var(--shadow-sm); font: var(--text-caption); font-weight: 850; text-align: center; }
-.slide-navigator-footer { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-.slide-navigator-actions { display: flex; gap: var(--space-1); }
-.slide-navigator-actions button { padding: var(--space-1) var(--space-2); background: transparent; color: var(--text-secondary); border: 1px solid transparent; border-radius: var(--radius-sm); font: var(--text-caption); }
-.slide-navigator-actions button:hover:not(:disabled) { background: var(--bg-surface-raised); color: var(--text-primary); border-color: var(--border-default); }
-.slide-navigator-actions button:disabled { opacity: 0.45; }
 .slide-navigator.is-compact .slide-nav-preview { width: 92px; }
 .slide-navigator.is-compact .slide-navigator-list a { display: grid; grid-template-columns: auto 92px minmax(96px, 1fr); align-items: center; gap: var(--space-2); padding: 3px; border: 1px solid transparent; border-radius: var(--radius-sm); }
 .slide-navigator.is-compact .slide-navigator-list a.is-current { background: var(--bg-accent-soft); border-color: var(--accent-primary); }
@@ -876,10 +892,33 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .slide-nav-meta { width: 110px; display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: var(--space-2); }
 .slide-nav-meta > span, .slide-nav-meta svg { width: 28px; display: block; fill: currentColor; }
 .slide-nav-meta strong { overflow: hidden; font: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
-.slide-navigator.is-pages { grid-template-columns: auto minmax(0, 1fr); }
-.slide-navigator.is-pages .slide-navigator-list { align-items: center; padding-block: var(--space-1); }
-.slide-page-number { min-width: 34px; height: 34px; display: grid; place-items: center; background: var(--bg-page); color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 850; }
-.slide-navigator.is-pages a.is-current .slide-page-number { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
+
+/* Duplicate/delete for the current slide, large and compact views. A sibling
+   of the Link (see the component), not a child of it, so it is never a button
+   nested inside an anchor — it just happens to sit visually on top. Covering
+   almost the whole tile is deliberate: the actual design is right there in
+   the main canvas, this thumbnail's job right now is proximity, not preview. */
+.slide-nav-overlay { position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; justify-content: center; gap: var(--space-2); background: color-mix(in srgb, var(--text-primary) 60%, transparent); border-radius: var(--radius-sm); }
+.button-tight { min-height: 26px; padding: 2px var(--space-2); gap: 4px; font-size: 0.72rem; }
+.button-tight:disabled { opacity: 0.55; }
+
+/* Pages/pills view: the number is a real pill now, and the current slide's
+   pill grows a split-button chevron for the same duplicate/delete pair, in a
+   dropdown instead of an overlay — there is no room for one on something this
+   small. Only the current pill gets the chevron; the rest are still plain
+   navigation, same as before. */
+.slide-navigator.is-pages .slide-navigator-list { align-items: center; padding-block: var(--space-2); }
+.slide-pill { position: relative; display: inline-flex; align-items: stretch; }
+.slide-pill-nav { min-width: 34px; height: 34px; padding: 0 var(--space-2); display: grid; place-items: center; background: var(--bg-page); color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 850; text-decoration: none; }
+.slide-pill-nav.is-current { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
+.slide-pill:has(.slide-pill-toggle) .slide-pill-nav { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: 0; }
+.slide-pill-toggle { min-width: 20px; padding: 0 4px; display: grid; place-items: center; background: var(--accent-primary); color: var(--text-on-accent); border: 1px solid var(--accent-primary); border-left: 1px solid color-mix(in srgb, var(--text-on-accent) 35%, transparent); border-top-right-radius: var(--radius-pill); border-bottom-right-radius: var(--radius-pill); font-size: 0.6rem; }
+.slide-pill-toggle:hover { background: var(--accent-primary-hover); }
+.slide-pill-menu { position: absolute; z-index: 15; top: calc(100% + var(--space-1)); left: 0; display: grid; gap: 2px; min-width: 170px; padding: var(--space-2); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); text-align: left; }
+.slide-pill-menu button { padding: var(--space-2); background: transparent; color: var(--text-primary); border: 0; border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; text-align: left; }
+.slide-pill-menu button:hover:not(:disabled) { background: var(--bg-surface-raised); }
+.slide-pill-menu button.is-danger { color: var(--status-danger); }
+.slide-pill-menu button:disabled { cursor: not-allowed; opacity: 0.5; }
 .editor-workspace { min-width: 0; grid-column: 3; grid-row: 2; padding: var(--space-5) var(--space-5) max(var(--space-8), 12vh); }
 .editor-context { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-3); color: var(--text-secondary); font: var(--text-caption); }
 .current-layout-control { display: flex; align-items: center; gap: var(--space-2); font-weight: 750; }
@@ -1050,9 +1089,18 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 /* No padding: absolute children resolve against the padding box either way, and
    present mode measured against the full canvas box. Adding inset here would
    silently shift every existing floating image. */
-.slide-float-layer { font-size: 1.9cqw; position: absolute; z-index: 8; inset: 0; pointer-events: none; }
+/* Below .slide-canvas (z-index 2) on purpose. A floating image is meant to sit
+   behind flow content — that is the whole point of Image Hero, a full-bleed
+   photo with a title overlaid on top — but painting above the canvas (the old
+   z-index 8/9) silently hid any flow text that overlapped a float. Dragging
+   still works: a floating image's chrome sits above the image itself
+   (`inset: auto 0 100% 0` below), outside the area flow text would cover. */
+.slide-float-layer { font-size: 1.9cqw; position: absolute; z-index: 1; inset: 0; pointer-events: none; }
 .slide-float-layer > * { pointer-events: auto; }
-.slide-viewport.is-editing > .slide-float-layer { z-index: 9; }
+/* Exception: a floating image's own settings panel must still clear flow
+   content while it is open, so the float layer rises above .slide-canvas only
+   for that moment. */
+.slide-viewport:has(.slide-float-layer .block-settings-panel) > .slide-float-layer { z-index: 12; }
 /* Geometry is applied inline to whichever element is this layer's direct child.
    `height: auto` lets the inline aspect-ratio drive the box; no hardcoded ratio
    may live here or it will override the image's real one. */
@@ -1146,14 +1194,12 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .block-settings-reset { padding: var(--space-2) 0 0; background: transparent; color: var(--accent-primary); border: 0; border-top: 1px solid var(--border-default); font: var(--text-caption); font-weight: 750; text-align: left; }
 
 
-/* The settings panel lives inside .slide-canvas (z-index 2) while floating
-   images live in .slide-float-layer (z-index 9). Those are sibling stacking
-   contexts, so no z-index on the panel itself can lift it above a float — the
-   panel was being covered by whatever image happened to overlap it. Raising the
-   whole canvas while a panel is open is the only thing that works, and it is
-   scoped to exactly that moment. */
-.slide-viewport:has(.block-settings-panel) > .slide-canvas { z-index: 12; }
-/* Same problem one level down when the settings belong to a floating image. */
+/* .slide-canvas (z-index 2) already paints above .slide-float-layer (z-index 1,
+   or 12 while one of its panels is open — see above), so a flow block's panel
+   never needs its own bump here.
+   Two floating images can still overlap each other, though: whichever one has
+   its settings panel open needs to sit above its sibling float so the panel
+   isn't covered by the other image. */
 .slide-float-layer > .editable-slide-block:has(.block-settings-panel) { z-index: 1; }
 
 .editable-slide-block { min-width: 0; position: relative; padding-top: 24px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
@@ -1245,7 +1291,11 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .outline-block-header:active { cursor: grabbing; }
 .outline-block-header:hover { background: var(--bg-surface-raised); }
 .outline-block-header h3 { margin: 0; font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
-.outline-block-header button { margin-left: auto; padding: var(--space-1) var(--space-2); background: var(--bg-surface-raised); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; }
+.outline-block-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
+.outline-block-actions button { padding: var(--space-1) var(--space-2); background: var(--bg-surface-raised); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; }
+.outline-block-actions button:hover { border-color: var(--border-strong); }
+.outline-block-actions button.is-danger { color: var(--status-danger); border-color: color-mix(in srgb, var(--status-danger) 45%, transparent); }
+.outline-block-actions button.is-danger:hover { background: var(--bg-accent-soft); border-color: var(--status-danger); }
 .outline-drag-handle { color: var(--text-secondary); font-size: 0.9rem; }
 .outline-block { display: grid; gap: var(--space-2); padding: var(--space-3); background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
 .outline-block label { display: grid; gap: var(--space-1); color: var(--text-secondary); font: var(--text-caption); font-weight: 700; }
@@ -1405,7 +1455,7 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
   .resource-palette-topbar { top: 0; }
   .slide-navigator, .editor-workspace { grid-column: auto; }
   .slide-navigator { display: block; }
-  .slide-navigator-heading, .slide-navigator-footer { margin-bottom: var(--space-2); }
+  .slide-navigator-heading { margin-bottom: var(--space-2); }
   .slide-navigator-list { margin-bottom: var(--space-2); }
   .layout-palette { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .content-palette { grid-template-columns: repeat(4, minmax(0, 1fr)); }

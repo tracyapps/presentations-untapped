@@ -12,7 +12,7 @@ export default function AppHeader() {
         <span>Presentations Untapped</span>
       </Link>
       <div className="header-actions">
-        <nav className="app-nav" aria-label="Workspace"><Link href="/decks">Decks</Link><Link href="/library">Library</Link></nav>
+        <nav className="app-nav" aria-label="Workspace"><Link href="/decks">Decks</Link><Link href="/companies">Companies</Link><Link href="/library">Library</Link></nav>
         <ThemeToggle />
         <UserButton />
       </div>
