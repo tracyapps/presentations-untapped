@@ -22,6 +22,10 @@ const matcher = middleware.match(/createRouteMatcher\(\[([^\]]*)\]\)/);
 assert.ok(matcher, "public route matcher not found");
 assert.ok(/"\/p\(\.\*\)"/.test(matcher[1]), "/p/** must be public — published decks are viewed logged out");
 assert.ok(/"\/sign-in\(\.\*\)"/.test(matcher[1]), "the sign-in screen must be public");
+// Google's OAuth review fetches the privacy policy with no session. Anything
+// that looks like a login wall fails verification.
+assert.ok(/"\/legal\(\.\*\)"/.test(matcher[1]),
+  "/legal/** must be public — OAuth verification requires the policy reachable logged out");
 // The inverse matters just as much: everything else has to be protected.
 assert.ok(/if \(!isPublicRoute\(req\)\) await auth\.protect\(\)/.test(middleware),
   "every non-public route must call auth.protect()");

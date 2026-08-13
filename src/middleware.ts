@@ -1,10 +1,12 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-/** PUBLIC routes — published decks and the sign-in screen.
+/** PUBLIC routes — published decks, the sign-in screen, and the legal pages.
  *  ⚠️ Test this logged-out in BOTH directions (see PLAN.md §8.3):
- *  /p/... must load without auth; everything else must redirect. */
-const isPublicRoute = createRouteMatcher(["/p(.*)", "/sign-in(.*)"]);
+ *  /p/... must load without auth; everything else must redirect.
+ *  /legal/... must stay public: Google's OAuth review fetches the privacy
+ *  policy without a session, and anything resembling a login wall fails it. */
+const isPublicRoute = createRouteMatcher(["/p(.*)", "/sign-in(.*)", "/legal(.*)"]);
 
 const hasClerk = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 

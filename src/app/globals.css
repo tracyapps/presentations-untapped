@@ -1500,3 +1500,32 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .public-missing > div { max-width: 46ch; display: grid; gap: var(--space-3); }
 .public-missing h1 { font: var(--text-h1); }
 .public-missing p:not(.eyebrow) { color: var(--text-secondary); line-height: 1.6; }
+
+/* --- Legal pages (privacy, terms) -------------------------------------
+   Standalone: no app header, no sign-in prompt. A Google OAuth reviewer has to
+   be able to read these with no session, and anything resembling a login wall
+   fails verification. */
+.legal-page { min-height: 100dvh; padding: var(--space-7) var(--space-5) var(--space-9); background: var(--bg-page); color: var(--text-primary); }
+.legal-page > article { width: min(70ch, 100%); margin: 0 auto; }
+.legal-page h1 { margin-top: var(--space-2); font: var(--text-display-md); }
+.legal-page h2 { margin-top: var(--space-7); font: var(--text-h2); }
+.legal-page h3 { margin-top: var(--space-5); font: var(--text-h4); }
+.legal-page p, .legal-page li { color: var(--text-secondary); line-height: 1.7; }
+.legal-page p { margin: var(--space-3) 0; }
+.legal-page ul { margin: var(--space-3) 0; padding-left: var(--space-5); display: grid; gap: var(--space-2); }
+.legal-page strong { color: var(--text-primary); }
+.legal-page a { color: var(--link-color); }
+.legal-page a:hover { color: var(--link-color-hover); }
+.legal-updated { color: var(--text-secondary); font: var(--text-caption); font-weight: 750; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+
+.legal-table { width: 100%; margin: var(--space-4) 0; border-collapse: collapse; }
+.legal-table th, .legal-table td { padding: var(--space-3); text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-default); }
+.legal-table thead th { color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.legal-table tbody th { color: var(--text-primary); font: var(--text-body-sm); font-weight: 800; white-space: nowrap; }
+.legal-table td { color: var(--text-secondary); font: var(--text-body-sm); }
+
+.legal-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-8); padding-top: var(--space-4); border-top: 1px solid var(--border-default); }
+.legal-footer nav { display: flex; gap: var(--space-4); }
+.legal-footer a { font: var(--text-body-sm); font-weight: 750; text-decoration: none; }
+.legal-footer a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.legal-footer p { margin: 0; color: var(--text-secondary); font: var(--text-caption); }
