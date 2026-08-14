@@ -405,6 +405,23 @@ button, select { cursor: pointer; }
 .palette-section h2 button i { font-size: 1rem; font-style: normal; transition: transform var(--duration-fast) var(--ease-out); }
 .palette-section.is-collapsed h2 button i { transform: rotate(-90deg); }
 .palette-section-content { display: grid; gap: var(--space-3); padding: var(--space-2) 0 var(--space-4); }
+
+/* A resizable section scrolls inside a box you control instead of growing until
+   it pushes the next section off the rail. The height you drag to is a request:
+   `min()` caps it against the viewport, so the same drag behaves sensibly on a
+   13-inch laptop and a 27-inch display, and one section can never take the whole
+   column. The floor stops it becoming a peephole. */
+.palette-section.is-resizable > .palette-section-content {
+  min-height: var(--palette-section-min);
+  max-height: min(var(--palette-section-height, 320px), var(--palette-section-max));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: var(--space-1);
+}
+.palette-section-resize-handle { height: 10px; margin-bottom: calc(var(--space-2) * -1); cursor: row-resize; }
+.palette-section-resize-handle::before { inset: 4px 0; height: 2px; }
+/* A hairline that says "this edge is draggable" without shouting it. */
+.palette-section.is-resizable > .palette-section-content { border-bottom: 1px solid var(--border-default); }
 .layout-palette { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
 .layout-palette button { display: grid; gap: var(--space-1); padding: var(--space-2); background: var(--bg-page); color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); text-align: left; }
 .layout-palette button.is-selected { color: var(--text-primary); border-color: var(--accent-primary); box-shadow: 0 0 0 1px var(--accent-primary); }
@@ -491,12 +508,15 @@ button, select { cursor: pointer; }
 .media-library-panel-modal .media-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); max-height: none; align-content: start; }
 
 /* --- Full-screen media picker ---------------------------------- */
-.media-modal-backdrop { position: fixed; inset: 0; z-index: 1200; padding: var(--space-5); background: color-mix(in srgb, var(--text-primary) 62%, transparent); }
-.media-modal { width: min(1400px, 100%); height: 100%; max-height: 920px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; margin: 0 auto; overflow: hidden; background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
-.media-modal-header, .media-modal-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-4) var(--space-5); border-color: var(--border-default); }
-.media-modal-header { border-bottom: 1px solid var(--border-default); }
-.media-modal-header p, .media-modal-header h2 { margin: 0; }
-.media-modal-close { width: 38px; height: 38px; padding: 0; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font-size: 1.4rem; }
+/* The two modals share one chrome deliberately: same backdrop, same frame, same
+   header and footer geometry. Choosing an image and choosing a block should not
+   feel like using two different applications. */
+.media-modal-backdrop, .picker-modal-backdrop { position: fixed; inset: 0; z-index: 1200; padding: var(--space-5); background: color-mix(in srgb, var(--text-primary) 62%, transparent); }
+.media-modal, .picker-modal { width: min(1400px, 100%); height: 100%; max-height: 920px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; margin: 0 auto; overflow: hidden; background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+.media-modal-header, .media-modal-footer, .picker-modal-header, .picker-modal-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-4) var(--space-5); border-color: var(--border-default); }
+.media-modal-header, .picker-modal-header { border-bottom: 1px solid var(--border-default); }
+.media-modal-header p, .media-modal-header h2, .picker-modal-header p, .picker-modal-header h2 { margin: 0; }
+.media-modal-close, .picker-modal-close { width: 38px; height: 38px; padding: 0; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-pill); font-size: 1.4rem; }
 .media-modal-body { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
 .media-modal-library { min-width: 0; overflow: hidden; padding: var(--space-5); }
 .media-modal-details { min-height: 0; display: grid; align-content: start; gap: var(--space-3); overflow-y: auto; padding: var(--space-5); background: var(--bg-page); border-left: 1px solid var(--border-default); }
@@ -529,8 +549,8 @@ button, select { cursor: pointer; }
 .media-rename-form .button { min-height: 42px; padding-inline: var(--space-3); }
 .media-rename-message { margin: calc(var(--space-2) * -1) 0 0; padding: var(--space-2) var(--space-3); background: var(--bg-accent-soft); color: var(--status-danger); border-radius: var(--radius-sm); font: var(--text-caption); line-height: 1.4; }
 .media-rename-message.is-success { background: var(--bg-teal-soft); color: var(--text-primary); }
-.media-modal-footer { border-top: 1px solid var(--border-default); color: var(--text-secondary); font: var(--text-body-sm); }
-.media-modal-footer > div { display: flex; gap: var(--space-2); }
+.media-modal-footer, .picker-modal-footer { border-top: 1px solid var(--border-default); color: var(--text-secondary); font: var(--text-body-sm); }
+.media-modal-footer > div, .picker-modal-footer > div { display: flex; gap: var(--space-2); }
 
 /* --- Shared library shell (LIBRARIES.md §3) ---------------------------
    Every library page renders through this. Keep the breadcrumbs, toolbar,
@@ -1616,3 +1636,122 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .legal-footer a { font: var(--text-body-sm); font-weight: 750; text-decoration: none; }
 .legal-footer a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .legal-footer p { margin: 0; color: var(--text-secondary); font: var(--text-caption); }
+
+/* ---------------------------------------------------------------------------
+   The library picker modal
+   ---------------------------------------------------------------------------
+   Chrome is shared with the media modal above. What is added here is the tab
+   strip and the two-column body: results on the left, the thing you have
+   selected on the right. The preview pane is fixed-width and never moves, which
+   is what makes it read as "this is what you are about to add" rather than as
+   another result.
+*/
+.picker-tabs { display: inline-flex; gap: 2px; margin-left: auto; padding: 2px; background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+.picker-tabs button { display: inline-flex; align-items: center; gap: var(--space-2); min-height: 32px; padding: 0 var(--space-4); background: transparent; color: var(--text-secondary); border: 0; border-radius: calc(var(--radius-sm) - 2px); font: var(--text-body-sm); font-weight: 750; }
+.picker-tabs button:hover { color: var(--text-primary); }
+.picker-tabs button.is-active { background: var(--bg-surface); color: var(--accent-primary); box-shadow: var(--shadow-sm); }
+.picker-tabs button small { padding: 1px var(--space-2); background: var(--bg-surface-raised); color: var(--text-secondary); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 750; }
+
+.picker-modal-body { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
+.picker-modal-results { min-width: 0; overflow-y: auto; padding: var(--space-5); }
+.picker-modal-results:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -4px; }
+.picker-modal-preview { min-height: 0; overflow-y: auto; padding: var(--space-5); background: var(--bg-page); border-left: 1px solid var(--border-default); }
+.picker-preview-empty { margin: 0; color: var(--text-secondary); font: var(--text-body-sm); }
+.picker-preview-body { display: grid; gap: var(--space-3); align-content: start; }
+.picker-preview-body h3 { margin: 0; font: var(--text-h4); }
+.picker-preview-description { margin: 0; color: var(--text-secondary); font: var(--text-body-sm); line-height: 1.6; }
+.picker-preview-stage { display: grid; place-items: center; overflow: hidden; padding: var(--space-3); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+.picker-preview-stage img { width: 100%; max-height: 260px; object-fit: contain; }
+.picker-preview-meta { display: grid; gap: var(--space-2); margin: 0; }
+.picker-preview-meta > div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.picker-preview-meta dt { color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.picker-preview-meta dd { margin: 0; color: var(--text-primary); font: var(--text-body-sm); text-align: right; }
+
+.picker-version { display: grid; gap: var(--space-1); color: var(--text-secondary); font: var(--text-caption); font-weight: 750; }
+.picker-version select { width: 100%; padding: var(--space-2) var(--space-3); background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-body-sm); }
+.picker-version select:disabled { opacity: 0.7; }
+.picker-version-why { margin: 0; color: var(--text-secondary); font: var(--text-caption); line-height: 1.5; }
+
+/* Masonry so blocks of genuinely different heights pack instead of leaving
+   holes — same reasoning as the library page grid. */
+.picker-block-grid { columns: 2 240px; column-gap: var(--space-3); }
+.picker-block-grid > * { break-inside: avoid; margin-bottom: var(--space-3); }
+.picker-block-rows { display: grid; gap: var(--space-2); }
+
+.picker-block { position: relative; display: grid; gap: var(--space-2); padding: var(--space-3); background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+.picker-block-row { grid-template-columns: minmax(0, 1fr); }
+.picker-block:hover { border-color: var(--accent-primary); }
+.picker-block[data-selected] { border-color: var(--accent-primary); box-shadow: 0 0 0 1px var(--accent-primary); }
+.picker-block-preview { overflow: hidden; border-radius: var(--radius-sm); }
+.picker-block-text { display: grid; gap: var(--space-1); min-width: 0; }
+.picker-block-text strong { font: var(--text-body-sm); font-weight: 800; }
+.picker-block-gist { overflow: hidden; color: var(--text-secondary); font: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.picker-block-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.picker-block-version { color: var(--text-secondary); font: var(--text-caption); font-weight: 750; }
+/* The hit target is the whole card. It sits above the content rather than
+   wrapping it, because a <button> may only contain phrasing content and a real
+   block preview is headings, lists and tables. */
+.picker-block-hit { position: absolute; inset: 0; padding: 0; background: transparent; border: 0; border-radius: inherit; cursor: pointer; }
+.picker-block-hit:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+
+/* The picker hosts the shell, so the shell's own page furniture stands down. */
+.lib[data-variant="picker"] { gap: var(--space-3); }
+.lib[data-variant="picker"] .lib-toolbar { position: sticky; top: calc(var(--space-5) * -1); z-index: 4; padding-block: var(--space-2); background: var(--bg-surface); }
+
+/* ---------------------------------------------------------------------------
+   Drill-down rail
+   ---------------------------------------------------------------------------
+   Two panels on one track. Only one is ever reachable — the other is `inert` —
+   so this is a transform, not a layout change: nothing reflows, nothing below
+   it moves, and the animation can be dropped entirely without changing what is
+   on screen.
+*/
+.drilldown { overflow: hidden; }
+.drilldown-track { position: relative; display: grid; grid-template-columns: 100% 100%; align-items: start; width: 200%; transition: transform var(--duration-fast) var(--ease-out); }
+.drilldown[data-level="items"] .drilldown-track { transform: translateX(-50%); }
+/* No slide on first paint — reopening the section should not re-announce
+   itself with an animation. */
+.drilldown:not([data-ready]) .drilldown-track { transition: none; }
+.drilldown-panel { min-width: 0; display: grid; align-content: start; gap: var(--space-2); }
+/* Only the level you are on is in flow, so the rail is as tall as what you can
+   actually see — a short category does not leave a column of blank space
+   underneath it just because the group list behind is longer. The other level
+   is still painted, so the slide is a slide and not a wipe. */
+.drilldown-panel[inert] { position: absolute; top: 0; width: 50%; }
+.drilldown-panel:first-child[inert] { left: 0; }
+.drilldown-panel:last-child[inert] { left: 50%; }
+
+.drilldown-groups, .drilldown-items { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.drilldown-groups > li > button { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 40px; padding: var(--space-2) var(--space-3); background: var(--bg-page); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); text-align: left; }
+.drilldown-groups > li > button:hover:not(:disabled) { background: var(--bg-surface-raised); border-color: var(--accent-primary); }
+.drilldown-groups > li > button:disabled { opacity: 0.5; }
+.drilldown-group-label { display: grid; gap: 1px; min-width: 0; flex: 1; }
+.drilldown-group-label strong { overflow: hidden; font: var(--text-body-sm); font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.drilldown-group-label small { color: var(--text-secondary); font: var(--text-caption); }
+.drilldown-count { min-width: 22px; padding: 1px 6px; background: var(--bg-surface-raised); color: var(--text-secondary); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 750; text-align: center; }
+.drilldown-groups > li > button i { color: var(--text-secondary); font-size: 1.1rem; font-style: normal; }
+
+.drilldown-back { display: inline-flex; align-items: center; gap: var(--space-1); align-self: start; padding: var(--space-1) var(--space-2) var(--space-1) 0; background: transparent; color: var(--accent-primary); border: 0; font: var(--text-caption); font-weight: 800; }
+.drilldown-back i { font-size: 1.1rem; font-style: normal; }
+.drilldown-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin: 0; color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
+.drilldown-heading span { padding: 1px 6px; background: var(--bg-surface-raised); border-radius: var(--radius-pill); letter-spacing: 0; }
+.drilldown-empty { padding: var(--space-2) 0; color: var(--text-secondary); font: var(--text-caption); line-height: 1.5; }
+
+/* One block in the rail. Preview and Add are separate because they answer
+   different questions, and neither should be the accidental result of the
+   other. */
+.library-rows { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.library-row { display: grid; gap: var(--space-2); padding: var(--space-2) var(--space-3); background: var(--bg-page); border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+.library-row:hover { border-color: var(--accent-primary); }
+.library-row-text { display: grid; gap: 2px; min-width: 0; }
+.library-row-text strong { overflow: hidden; font: var(--text-body-sm); font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.library-row-text .lib-status-pill { justify-self: start; }
+.library-row-gist { overflow: hidden; color: var(--text-secondary); font: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.library-row-actions { display: flex; gap: var(--space-1); }
+.library-row-actions button { flex: 1; min-height: 30px; padding: 0 var(--space-2); background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; }
+.library-row-actions button:hover { border-color: var(--accent-primary); }
+.library-row-actions button.is-primary { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .drilldown-track { transition: none; }
+}

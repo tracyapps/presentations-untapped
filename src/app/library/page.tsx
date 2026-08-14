@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import AppHeader from "@/components/AppHeader";
 import BlockLibrary from "@/components/library/BlockLibrary";
+import { blockTaxonomyOptions } from "@/components/library/block-catalog";
 import { getBlockLibraryItems } from "@/lib/data/library";
 import { getTagsForSubject } from "@/lib/data/taxonomy";
 
@@ -13,18 +14,7 @@ export default async function LibraryPage() {
     getTagsForSubject("library_item"),
   ]);
 
-  // Counts come from the items actually on the page rather than from the tag
-  // table, so a filter never offers an option that returns nothing.
-  const used = (id: string) => items.filter((item) =>
-    item.category?.id === id || item.tags.some((tag) => tag.id === id)).length;
-
-  const categories = allTags.filter((tag) => tag.kind === "category")
-    .map((tag) => ({ id: tag.id, name: tag.name, count: used(tag.id) }))
-    .filter((tag) => tag.count > 0);
-
-  const tagOptions = allTags.filter((tag) => tag.kind === "tag")
-    .map((tag) => ({ id: tag.id, name: tag.name, count: used(tag.id) }))
-    .filter((tag) => tag.count > 0);
+  const { categories, tagOptions } = blockTaxonomyOptions(items, allTags);
 
   return (
     <main className="app-shell">

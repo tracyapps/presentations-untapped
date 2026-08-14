@@ -293,6 +293,45 @@ dashboard thumbnails, no image generation.
 
 ---
 
+### 3.6 Two surfaces, one library
+
+The shell renders in two places, and the sameness is the feature.
+
+- **The page** (`/library/blocks`) — `LibraryShell`. Search, filters, and page
+  live in the URL, so a filtered view is a link.
+- **The picker modal** (in the slide editor) — `LibraryPickerShell`. Identical
+  toolbar, filters, sort, views and empty states; state is component-local,
+  because rewriting the URL you are editing a slide at, and turning the back
+  button into filter history, is not a trade worth making for a popup.
+
+The picker is tabbed — Content blocks, Media, Slides (inert until §4.3 ships) —
+so landing on the wrong library costs a click, not a navigation. It has a fixed
+preview pane on the right: what you selected, in the version you selected, then
+**Add**. Version choice renders as a real disabled control (§8) rather than
+being hidden.
+
+Filters, sorts, and the search haystack for blocks live in
+`components/library/block-catalog.ts`, imported by both surfaces. A filter added
+in one place exists in both by construction.
+
+**The editor sidebar is not a third copy of the library.** It is a drill-down
+rail (`DrilldownNav`): groups first — Favorites, then categories, then
+Uncategorized — and stepping into one *replaces* the level rather than expanding
+below it, so nothing reflows while you are mid-edit. Categories, not tags: a
+block has exactly one category, so the groups partition the library and every
+block is reachable by exactly one route. Tags overlap by design, which makes
+them a good thing to search by in the picker and a bad thing to build a tree
+from. Each row offers Preview (hands off to the picker at its confirm step) and
+Add. Typing in the rail's search flattens the tree, because while you are typing
+the category is not what you are thinking about.
+
+Sidebar sections clamp their height between `--palette-section-min` and
+`--palette-section-max` (a share of the viewport, not a pixel count) and are
+vertically resizable with the same handle the columns use. A section can never
+grow enough to push the one below it off screen.
+
+---
+
 ## 4. The four libraries
 
 ### 4.1 Companies — `/companies`

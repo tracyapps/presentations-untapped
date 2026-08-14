@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ImageFramePicker from "@/components/ImageFramePicker";
 import MediaLibraryPanel from "@/components/MediaLibraryPanel";
 import type { MediaAsset } from "@/lib/data/media";
+import { useFocusTrap } from "@/lib/focus-trap";
 import { alignFloatingImage, clampFloatingImage, imageAspectRatio, type ImageAlignment } from "@/lib/image-geometry";
 import { frameByKey } from "@/lib/slides/styles";
 import type { ContentNode, ContentProps } from "@/lib/slides/types";
@@ -48,6 +49,8 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
    */
   const [view, setView] = useState<"browse" | "edit">(image ? "edit" : "browse");
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  useFocusTrap(dialogRef, open);
   /** Latest props for the open image, read by the seeding effect without making
    *  that effect depend on the node's identity. */
   const imageProps = useRef<ContentProps["image"] | null>(image ? { ...image.props } : null);
@@ -164,7 +167,7 @@ export default function MediaLibraryModal({ open, image, initialAsset, items, co
 
   return (
     <div className="media-modal-backdrop">
-      <section className="media-modal" role="dialog" aria-modal="true" aria-labelledby="media-modal-title">
+      <section ref={dialogRef} className="media-modal" role="dialog" aria-modal="true" aria-labelledby="media-modal-title">
         <header className="media-modal-header">
           <div>
             <p className="eyebrow">{image ? "Image block" : "Media library"}</p>

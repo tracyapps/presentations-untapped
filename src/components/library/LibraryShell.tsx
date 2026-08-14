@@ -13,17 +13,21 @@
  * not reserve height it is not using.
  *
  * State placement:
- *   - search / filters / page → URL params, so a filtered view is a link you can
- *     paste to a coworker and the back button works.
- *   - sort / view mode / page size → localStorage per library. Personal
- *     preferences that should survive a visit, not clutter a shared URL.
+ *   - search / filters / page → a **param store**, so the same body works in two
+ *     places. On a library page the store is the URL, which makes a filtered
+ *     view a link you can paste to a coworker and keeps the back button honest.
+ *     Inside the editor's picker modal the store is component state, because
+ *     rewriting the URL you are editing a slide at — and turning the back button
+ *     into filter history — is not a trade worth making for a transient popup.
+ *   - sort / view mode / page size → localStorage per library, shared by both.
+ *     Personal preferences that should survive a visit, not clutter a shared URL.
  *   - selection → never persisted; cleared on filter change, and announced.
  */
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import FilterPanel from "./FilterPanel";
-import { PAGE_SIZES, VIEW_LABELS, type LibraryShellProps, type Selection, type ViewMode } from "./types";
+import { PAGE_SIZES, VIEW_LABELS, type LibraryShellProps, type ParamStore, type Selection, type ViewMode } from "./types";
 
 const VIEW_ICONS: Record<ViewMode, string> = { grid: "▦", list: "☰", card: "▤", gallery: "◫" };
 
@@ -34,40 +38,22 @@ function writeLocal(key: string, value: string) {
   try { window.localStorage.setItem(key, value); } catch { /* private mode — a default is a fine outcome */ }
 }
 
-export default function LibraryShell<T extends { id: string }>({
-  title, description, items, searchText, views, renderView, filters = [], draftToggle,
-  sorts, sortHiddenForViews = [], bulkActions = [], addActions = [], storageKey,
-  breadcrumbs, notice, emptyState, noResultsState,
-}: LibraryShellProps<T>) {
+/**
+ * The page store. `useSearchParams` is deliberately confined to this wrapper:
+ * it opts a tree into dynamic rendering, and the picker lives inside the slide
+ * editor where that would be an odd thing to inherit from a popup.
+ */
+function useUrlParams(): ParamStore {
   const router = useRouter();
   const pathname = usePathname();
-  const params = useSearchParams();
-  const baseId = useId();
+  const search = useSearchParams();
+  const [pending, startTransition] = useTransition();
+  const serialized = search.toString();
 
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const lastToggledIndex = useRef<number | null>(null);
-  const [isPending, startTransition] = useTransition();
-  const [announcement, setAnnouncement] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [addOpen, setAddOpen] = useState(false);
+  const params = useMemo(() => Object.fromEntries(new URLSearchParams(serialized)), [serialized]);
 
-  /* ------------------------- URL-backed state ------------------------- */
-
-  const query = params.get("q") ?? "";
-  const page = Math.max(1, Number(params.get("page") ?? 1) || 1);
-  const hideDrafts = params.get("approved") === "1";
-
-  const activeFilters = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const filter of filters) {
-      const raw = params.get(filter.id);
-      if (raw) map.set(filter.id, raw.split(",").filter(Boolean));
-    }
-    return map;
-  }, [filters, params]);
-
-  const setParams = useCallback((updates: Record<string, string | null>) => {
-    const next = new URLSearchParams(params.toString());
+  const set = useCallback((updates: Record<string, string | null>) => {
+    const next = new URLSearchParams(serialized);
     for (const [key, value] of Object.entries(updates)) {
       if (value === null || value === "") next.delete(key);
       else next.set(key, value);
@@ -75,7 +61,77 @@ export default function LibraryShell<T extends { id: string }>({
     startTransition(() => {
       router.replace(next.size ? `${pathname}?${next}` : pathname, { scroll: false });
     });
-  }, [params, pathname, router]);
+  }, [serialized, pathname, router]);
+
+  return { params, set, pending };
+}
+
+/** The picker store. Same contract, nothing leaves the component. */
+function useLocalParams(): ParamStore {
+  const [params, setParams] = useState<Record<string, string>>({});
+  const set = useCallback((updates: Record<string, string | null>) => {
+    setParams((current) => {
+      const next = { ...current };
+      for (const [key, value] of Object.entries(updates)) {
+        if (value === null || value === "") delete next[key];
+        else next[key] = value;
+      }
+      return next;
+    });
+  }, []);
+  return { params, set, pending: false };
+}
+
+/** A library as its own page: full header, breadcrumbs, linkable filters. */
+export default function LibraryShell<T extends { id: string }>(props: LibraryShellProps<T>) {
+  const store = useUrlParams();
+  return <LibraryShellBody {...props} store={store} />;
+}
+
+/**
+ * The same library inside the picker modal. Identical toolbar, filters, sort,
+ * views and empty states — that sameness is the entire point — minus the page
+ * furniture (title block, breadcrumbs, add menu) the modal supplies itself.
+ */
+export function LibraryPickerShell<T extends { id: string }>(props: LibraryShellProps<T>) {
+  const store = useLocalParams();
+  return <LibraryShellBody {...props} store={store} variant="picker" />;
+}
+
+function LibraryShellBody<T extends { id: string }>({
+  title, description, items, searchText, views, renderView, filters = [], draftToggle,
+  sorts, sortHiddenForViews = [], bulkActions = [], addActions = [], storageKey,
+  breadcrumbs, notice, emptyState, noResultsState, store, variant = "page",
+}: LibraryShellProps<T> & { store: ParamStore; variant?: "page" | "picker" }) {
+  const router = useRouter();
+  const { params } = store;
+  const isPicker = variant === "picker";
+  const baseId = useId();
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const lastToggledIndex = useRef<number | null>(null);
+  const [isTransitioning, startTransition] = useTransition();
+  const isPending = isTransitioning || store.pending;
+  const [announcement, setAnnouncement] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [addOpen, setAddOpen] = useState(false);
+
+  /* ------------------------- Store-backed state ------------------------ */
+
+  const query = params.q ?? "";
+  const page = Math.max(1, Number(params.page ?? 1) || 1);
+  const hideDrafts = params.approved === "1";
+
+  const activeFilters = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const filter of filters) {
+      const raw = params[filter.id];
+      if (raw) map.set(filter.id, raw.split(",").filter(Boolean));
+    }
+    return map;
+  }, [filters, params]);
+
+  const setParams = store.set;
 
   /* ------------------- Remembered preferences (local) ------------------ */
 
@@ -296,8 +352,8 @@ export default function LibraryShell<T extends { id: string }>({
   const showSort = sorts.length > 1 && !sortHiddenForViews.includes(view);
 
   return (
-    <section className="lib" aria-label={title}>
-      {breadcrumbs && breadcrumbs.length > 0 && (
+    <section className="lib" data-variant={variant} aria-label={title}>
+      {!isPicker && breadcrumbs && breadcrumbs.length > 0 && (
         <nav className="lib-breadcrumbs" aria-label="Breadcrumb">
           <ol>
             {breadcrumbs.map((crumb, index) => (
@@ -311,7 +367,10 @@ export default function LibraryShell<T extends { id: string }>({
         </nav>
       )}
 
-      <header className="lib-header">
+      {/* The modal's own header already names the library and the tab strip
+          already says which one you are in, so repeating the title here would
+          just be furniture eating the height the results need. */}
+      {!isPicker && <header className="lib-header">
         <div className="lib-header-text">
           <h1>{title}</h1>
           {description && <p>{description}</p>}
@@ -348,7 +407,7 @@ export default function LibraryShell<T extends { id: string }>({
             )}
           </div>
         )}
-      </header>
+      </header>}
 
       {notice && <p className="library-status" role="status">{notice}</p>}
 

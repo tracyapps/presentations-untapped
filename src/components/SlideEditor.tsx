@@ -13,6 +13,10 @@ import SlideCanvas from "@/components/SlideCanvas";
 import MediaLibraryPanel from "@/components/MediaLibraryPanel";
 import PublishControl from "@/components/PublishControl";
 import MediaLibraryModal from "@/components/MediaLibraryModal";
+import LibraryPickerModal, { type PickerTab } from "@/components/library/LibraryPickerModal";
+import DrilldownNav, { type DrilldownGroup } from "@/components/library/DrilldownNav";
+import StatusPill from "@/components/library/StatusPill";
+import { nodeSummary, type TaxonomyOption } from "@/components/library/block-catalog";
 import VoiceoverEditor from "@/components/VoiceoverEditor";
 import type { EditorDeck, EditorSlide } from "@/lib/data/editor";
 import type { LibraryBlockItem } from "@/lib/data/library";
@@ -54,6 +58,17 @@ const PANEL_LIMITS = {
   resourceWidth: [190, 420],
   inspectorWidth: [190, 380],
 } as const;
+const SECTION_HEIGHT_KEY = "lu-editor-section-heights-v1";
+/**
+ * How tall a palette section's contents may get.
+ *
+ * The floor stops a section collapsing into a peephole you scroll for days; the
+ * ceiling is applied in CSS as `min(<this>, var(--palette-section-max))`, which
+ * is a share of the viewport — so the same drag feels right on a laptop and on
+ * a 27-inch display, and no section can ever push the one below it off screen.
+ */
+const SECTION_HEIGHT_LIMITS = [140, 900] as const;
+const DEFAULT_SECTION_HEIGHT = 320;
 /** How long a passing status notice (e.g. "Added X to slide 3") stays up
  *  before it clears itself. Long enough to read, short enough that it does
  *  not sit there forever the way an un-dismissed toast used to. */
@@ -102,14 +117,19 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLibrary }: { deck: EditorDeck; initialSlide: EditorSlide; libraryItems: LibraryBlockItem[]; mediaLibrary: MediaLibraryData }) {
+export default function SlideEditor({ deck, initialSlide, libraryItems, libraryCategories, libraryTags, mediaLibrary }: { deck: EditorDeck; initialSlide: EditorSlide; libraryItems: LibraryBlockItem[]; libraryCategories: TaxonomyOption[]; libraryTags: TaxonomyOption[]; mediaLibrary: MediaLibraryData }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("design");
   const [previewTheme, setPreviewTheme] = useState<"light" | "dark">(deck.themeDefault);
   const [paletteState, setPaletteState] = useState(DEFAULT_PALETTE_STATE);
+  const [sectionHeights, setSectionHeights] = useState<Partial<Record<PaletteSection, number>>>({});
   const [availableLibraryItems, setAvailableLibraryItems] = useState(libraryItems);
   const [mediaItems, setMediaItems] = useState(mediaLibrary.items);
   const [libraryQuery, setLibraryQuery] = useState("");
+  const [drilldownGroup, setDrilldownGroup] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerTab, setPickerTab] = useState<PickerTab>("blocks");
+  const [pickerBlockId, setPickerBlockId] = useState<string | null>(null);
   const [doc, setDoc] = useState(initialSlide.blocks);
   const [savedDoc, setSavedDoc] = useState(initialSlide.blocks);
   const [layoutKey, setLayoutKey] = useState(initialSlide.layoutKey);
@@ -125,7 +145,9 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   const [libraryTarget, setLibraryTarget] = useState<Node | null>(null);
   const [libraryName, setLibraryName] = useState("");
   const [mediaTargetId, setMediaTargetId] = useState<string | null>(null);
-  const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false);
+  /* Browsing media without a target block now goes through the picker modal,
+     so this one is only ever opened *at* an image block — which is why it can
+     assume there is something to adjust. */
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
   const [mediaInitialAsset, setMediaInitialAsset] = useState<MediaAsset | null>(null);
@@ -148,7 +170,6 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   }, [doc, mediaTargetId]);
   const closeMediaModal = useCallback(() => {
     setMediaTargetId(null);
-    setMediaLibraryOpen(false);
     setMediaInitialAsset(null);
   }, []);
 
@@ -160,6 +181,16 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
       if (saved) setPaletteState((current) => ({ ...current, ...saved }));
     } catch {
       localStorage.removeItem(PALETTE_STATE_KEY);
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(SECTION_HEIGHT_KEY) ?? "null") as Partial<Record<PaletteSection, number>> | null;
+      if (saved) {
+        setSectionHeights(Object.fromEntries(Object.entries(saved)
+          .filter(([, value]) => Number.isFinite(value))
+          .map(([key, value]) => [key, clamp(Number(value), ...SECTION_HEIGHT_LIMITS)])));
+      }
+    } catch {
+      localStorage.removeItem(SECTION_HEIGHT_KEY);
     }
   }, []);
   useEffect(() => {
@@ -184,8 +215,94 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
 
   const visibleLibraryItems = useMemo(() => {
     const query = libraryQuery.trim().toLowerCase();
-    return availableLibraryItems.filter((item) => !query || `${item.name} ${item.node.type}`.toLowerCase().includes(query));
+    if (!query) return availableLibraryItems;
+    return availableLibraryItems.filter((item) =>
+      `${item.name} ${item.category?.name ?? ""} ${nodeSummary(item.node)}`.toLowerCase().includes(query));
   }, [availableLibraryItems, libraryQuery]);
+
+  /**
+   * The sidebar's levels.
+   *
+   * Categories, not tags: a block lives in exactly one category, so the groups
+   * partition the library and every block is reachable by exactly one route.
+   * Tags overlap by design, which makes them a fine thing to *search* by in the
+   * picker and a bad thing to build a tree from. Favourites leads because a
+   * shortlist you curated is the most likely reason you opened this at all, and
+   * Uncategorized is last but never hidden — a block you cannot reach is a block
+   * you will save a second copy of.
+   */
+  const drilldownGroups = useMemo<Array<DrilldownGroup<LibraryBlockItem>>>(() => {
+    const byCategory = new Map<string, { label: string; items: LibraryBlockItem[] }>();
+    const uncategorized: LibraryBlockItem[] = [];
+
+    for (const item of availableLibraryItems) {
+      if (!item.category) { uncategorized.push(item); continue; }
+      const bucket = byCategory.get(item.category.id)
+        ?? { label: item.category.name, items: [] };
+      bucket.items.push(item);
+      byCategory.set(item.category.id, bucket);
+    }
+
+    const favorites = availableLibraryItems.filter((item) => item.favorited);
+
+    return [
+      ...(favorites.length ? [{ id: "favorites", label: "Favorites", hint: "Starred in the library", items: favorites }] : []),
+      ...[...byCategory.entries()]
+        .map(([id, bucket]) => ({ id, label: bucket.label, items: bucket.items }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      ...(uncategorized.length ? [{ id: "uncategorized", label: "Uncategorized", hint: "No category yet", items: uncategorized }] : []),
+    ];
+  }, [availableLibraryItems]);
+
+  /**
+   * One block in the rail.
+   *
+   * Two actions, and the split is the point: **Add** is for when you already
+   * know, **Preview** hands off to the picker modal at its confirm step for
+   * when you want to look first. Preview deliberately opens the same modal
+   * rather than a bespoke sidebar popover — meeting one familiar surface from
+   * both directions is what makes the second visit fast.
+   */
+  function renderLibraryRow(item: LibraryBlockItem) {
+    return (
+      <div className="library-row">
+        <span className="library-row-text">
+          <strong>{item.name}</strong>
+          <span className="library-row-gist">{nodeSummary(item.node)}</span>
+          <StatusPill status={item.status} />
+        </span>
+        <span className="library-row-actions">
+          <button type="button" onClick={() => openPicker("blocks", item.id)}>
+            Preview<span className="sr-only"> {item.name}</span>
+          </button>
+          <button type="button" className="is-primary" onClick={() => insertLibraryItem(item)}>
+            Add<span className="sr-only"> {item.name} to this slide</span>
+          </button>
+        </span>
+      </div>
+    );
+  }
+
+  function openPicker(tab: PickerTab, blockId?: string, asset?: MediaAsset) {
+    setPickerTab(tab);
+    setPickerBlockId(blockId ?? null);
+    setMediaInitialAsset(asset ?? null);
+    setPickerOpen(true);
+  }
+
+  function closePicker() {
+    setPickerOpen(false);
+    setPickerBlockId(null);
+    setMediaInitialAsset(null);
+  }
+
+  function setSectionHeight(section: PaletteSection, height: number) {
+    setSectionHeights((current) => {
+      const next = { ...current, [section]: clamp(height, ...SECTION_HEIGHT_LIMITS) };
+      localStorage.setItem(SECTION_HEIGHT_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
   const navigationSlides = useMemo(() => deck.slides.map((slide) => slide.id === initialSlide.id
     ? { ...slide, blocks: doc, layoutKey }
     : slide), [deck.slides, doc, initialSlide.id, layoutKey]);
@@ -545,12 +662,6 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
     setLibraryNotice(`Added ${asset.name} as a floating image on slide ${initialSlide.position}.`);
   }
 
-  function openMediaLibrary(asset?: MediaAsset) {
-    setMediaTargetId(null);
-    setMediaInitialAsset(asset ?? null);
-    setMediaLibraryOpen(true);
-  }
-
   function useMediaAsBackground(asset: MediaAsset) {
     updateSlideDesign({ backgroundImage: { src: asset.url, position: "center", overlay: "soft" } });
     setLibraryNotice(`Set ${asset.name} as the background for slide ${initialSlide.position}.`);
@@ -711,17 +822,57 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             <div><strong>Library</strong></div>
           </div>
 
-          <PaletteSectionPanel id="library" label="Library" count={availableLibraryItems.length} open={paletteState.library} onToggle={() => togglePaletteSection("library")}>
-            <div className="library-palette-heading"><p className="palette-help">Insert a reusable block.</p><Link href="/library" onClick={confirmNavigate}>Open library</Link></div>
-            <label className="library-search"><span className="sr-only">Search library blocks</span><input type="search" value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="Search saved blocks" /></label>
-            <div className="library-palette" aria-live="polite">
-              {visibleLibraryItems.map((item) => <button type="button" onClick={() => insertLibraryItem(item)} key={item.id}><strong>{item.name}</strong><span>{item.node.type.replace(/([A-Z])/g, " $1")}</span></button>)}
-              {!visibleLibraryItems.length && <p className="library-palette-empty">{availableLibraryItems.length ? "No matching blocks." : "Save a block with the star button to build your library."}</p>}
+          {/* Two ways in, on purpose. The rail is the confident path — you know
+              what you want, you step into its group and add it. Browse all is
+              the searching path, and it opens the same modal the media library
+              opens, because "look something up" should not mean two different
+              experiences depending on what you are looking up. */}
+          <PaletteSectionPanel
+            id="library" label="Library" count={availableLibraryItems.length}
+            open={paletteState.library} onToggle={() => togglePaletteSection("library")}
+            height={sectionHeights.library ?? DEFAULT_SECTION_HEIGHT}
+            onHeightChange={(height) => setSectionHeight("library", height)}
+          >
+            <div className="library-palette-heading">
+              <p className="palette-help">Step into a group, or search everything.</p>
+              <button type="button" className="palette-text-action" onClick={() => openPicker("blocks")}>Browse all</button>
             </div>
+            <label className="library-search">
+              <span className="sr-only">Search saved blocks</span>
+              <input type="search" value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder="Search saved blocks" />
+            </label>
+
+            {libraryQuery.trim() ? (
+              /* Searching flattens the tree — while you are typing, which
+                 category something sits in is not what you are thinking about. */
+              <ul className="library-rows" aria-label={`Blocks matching ${libraryQuery}`}>
+                {visibleLibraryItems.map((item) => (
+                  <li key={item.id}>{renderLibraryRow(item)}</li>
+                ))}
+                {!visibleLibraryItems.length && (
+                  <li className="library-palette-empty">No blocks match “{libraryQuery.trim()}”.</li>
+                )}
+              </ul>
+            ) : availableLibraryItems.length ? (
+              <DrilldownNav<LibraryBlockItem>
+                groups={drilldownGroups}
+                level={drilldownGroup}
+                onLevelChange={setDrilldownGroup}
+                itemsLabel="blocks"
+                renderItem={renderLibraryRow}
+              />
+            ) : (
+              <p className="library-palette-empty">Save a block with the bookmark button to build your library.</p>
+            )}
           </PaletteSectionPanel>
-          <PaletteSectionPanel id="media" label="Media" count={mediaItems.length} open={paletteState.media} onToggle={() => togglePaletteSection("media")}>
-            <div className="library-palette-heading"><p className="palette-help">Click to preview and choose how to use an image.</p><button type="button" className="palette-text-action" onClick={() => openMediaLibrary()}>Open library</button></div>
-            <MediaLibraryPanel items={mediaItems} configured={mediaLibrary.configured} loadError={mediaLibrary.error} onUploaded={registerMedia} onSelect={openMediaLibrary} />
+          <PaletteSectionPanel
+            id="media" label="Media" count={mediaItems.length}
+            open={paletteState.media} onToggle={() => togglePaletteSection("media")}
+            height={sectionHeights.media ?? DEFAULT_SECTION_HEIGHT}
+            onHeightChange={(height) => setSectionHeight("media", height)}
+          >
+            <div className="library-palette-heading"><p className="palette-help">Click to preview and choose how to use an image.</p><button type="button" className="palette-text-action" onClick={() => openPicker("media")}>Browse all</button></div>
+            <MediaLibraryPanel items={mediaItems} configured={mediaLibrary.configured} loadError={mediaLibrary.error} onUploaded={registerMedia} onSelect={(asset) => openPicker("media", undefined, asset)} />
           </PaletteSectionPanel>
         </aside>}
         {panelLayout.resourceVisible && <ResizeHandle orientation="vertical" className="resource-resize-handle" label="Resize add slide panel" value={panelLayout.resourceWidth} min={PANEL_LIMITS.resourceWidth[0]} max={PANEL_LIMITS.resourceWidth[1]} resetValue={DEFAULT_PANEL_LAYOUT.resourceWidth} onChange={(resourceWidth) => updatePanelLayout({ resourceWidth })} />}
@@ -886,8 +1037,27 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
           </section>
         </div>
       )}
+      <LibraryPickerModal
+        open={pickerOpen}
+        tab={pickerTab}
+        onTabChange={setPickerTab}
+        onClose={closePicker}
+        blocks={availableLibraryItems}
+        categories={libraryCategories}
+        tagOptions={libraryTags}
+        initialBlockId={pickerBlockId}
+        onAddBlock={insertLibraryItem}
+        media={mediaItems}
+        mediaConfigured={mediaLibrary.configured}
+        mediaLoadError={mediaLibrary.error}
+        initialAssetUrl={mediaInitialAsset?.url ?? null}
+        onMediaUploaded={registerMedia}
+        onMediaDelete={deleteMediaAsset}
+        onAddMedia={addFloatingImageFromMedia}
+        onUseMediaAsBackground={useMediaAsBackground}
+      />
       <MediaLibraryModal
-        open={mediaLibraryOpen || !!mediaTarget}
+        open={!!mediaTarget}
         image={mediaTarget}
         initialAsset={mediaInitialAsset}
         items={mediaItems}
@@ -906,11 +1076,44 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
   );
 }
 
-function PaletteSectionPanel({ id, label, count, open, onToggle, children }: { id: PaletteSection; label: string; count?: number; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+/**
+ * A collapsible section of a side panel.
+ *
+ * Pass `height` and `onHeightChange` and the section becomes resizable: its
+ * contents scroll inside a box you drag, instead of the section growing without
+ * limit and shoving everything below it down the rail. The height is a request,
+ * not a promise — CSS caps it against the viewport, so a section can never eat
+ * the whole column on a short screen (see `--palette-section-max`).
+ */
+function PaletteSectionPanel({ id, label, count, open, onToggle, height, onHeightChange, children }: {
+  id: PaletteSection;
+  label: string;
+  count?: number;
+  open: boolean;
+  onToggle: () => void;
+  height?: number;
+  onHeightChange?: (height: number) => void;
+  children: React.ReactNode;
+}) {
   const contentId = `palette-section-${id}`;
-  return <section className={`palette-section${open ? " is-open" : " is-collapsed"}`}>
+  const resizable = open && height !== undefined && Boolean(onHeightChange);
+  return <section className={`palette-section${open ? " is-open" : " is-collapsed"}${resizable ? " is-resizable" : ""}`}>
     <h2><button type="button" aria-expanded={open} aria-controls={contentId} onClick={onToggle}><span>{label}{count !== undefined && <small>{count}</small>}</span><i aria-hidden="true">⌄</i></button></h2>
-    {open && <div className="palette-section-content" id={contentId}>{children}</div>}
+    {open && <div
+      className="palette-section-content"
+      id={contentId}
+      style={height !== undefined ? { "--palette-section-height": `${height}px` } as React.CSSProperties : undefined}
+    >{children}</div>}
+    {resizable && <ResizeHandle
+      orientation="horizontal"
+      className="palette-section-resize-handle"
+      label={`Resize the ${label} section`}
+      value={height!}
+      min={SECTION_HEIGHT_LIMITS[0]}
+      max={SECTION_HEIGHT_LIMITS[1]}
+      resetValue={DEFAULT_SECTION_HEIGHT}
+      onChange={onHeightChange!}
+    />}
   </section>;
 }
 

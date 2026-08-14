@@ -119,6 +119,20 @@ export type TableViewProps<T extends { id: string }> = {
 
 /* ------------------------------- The shell ------------------------------ */
 
+/**
+ * Where the shell keeps search, filters and page.
+ *
+ * Two implementations, one contract: the URL on a library page, component state
+ * inside the picker modal. Everything else about the shell is identical, which
+ * is what lets the modal and the page feel like the same library.
+ */
+export type ParamStore = {
+  params: Record<string, string>;
+  set: (updates: Record<string, string | null>) => void;
+  /** True while a navigation the store started is still in flight. */
+  pending: boolean;
+};
+
 export type LibraryShellProps<T extends { id: string }> = {
   title: string;
   description?: string;

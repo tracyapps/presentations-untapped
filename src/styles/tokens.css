@@ -45,6 +45,14 @@
   --font-mono: 'Roboto Mono', ui-monospace, monospace;
   --tracking-display: 0em; /** style guide: set tracking to zero for Montserrat */
   --tracking-eyebrow: 0.08em;
+  /* How tall a resizable side-panel section may get. The ceiling is a share of
+     the viewport rather than a pixel count so it scales with the screen instead
+     of the design; the floor is the point below which a scrolling list stops
+     being a list and becomes a peephole. Both are tunable here — nothing else
+     hard-codes them. */
+  --palette-section-min: 9rem;
+  --palette-section-max: 68vh;
+
   --duration-fast: 150ms;
   --duration-base: 250ms;
   --duration-slow: 450ms;
