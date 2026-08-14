@@ -13,6 +13,7 @@ import SlideCanvas from "@/components/SlideCanvas";
 import MediaLibraryPanel from "@/components/MediaLibraryPanel";
 import PublishControl from "@/components/PublishControl";
 import MediaLibraryModal from "@/components/MediaLibraryModal";
+import ResizeHandle from "@/components/ResizeHandle";
 import LibraryPickerModal, { type PickerTab } from "@/components/library/LibraryPickerModal";
 import DrilldownNav, { type DrilldownGroup } from "@/components/library/DrilldownNav";
 import StatusPill from "@/components/library/StatusPill";
@@ -1121,63 +1122,6 @@ function PanelViewToggle<T extends string>({ label, value, options, onChange }: 
   return <div className="panel-view-toggle" role="group" aria-label={label}>
     {options.map((option) => <button type="button" aria-label={option.label} title={option.label} aria-pressed={value === option.value} onClick={() => onChange(option.value)} key={option.value}><span aria-hidden="true">{option.icon}</span></button>)}
   </div>;
-}
-
-function ResizeHandle({ orientation, className, label, value, min, max, resetValue, onChange }: {
-  orientation: "vertical" | "horizontal";
-  className: string;
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  resetValue: number;
-  onChange: (value: number) => void;
-}) {
-  function startResize(event: React.PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    const startPosition = orientation === "vertical" ? event.clientX : event.clientY;
-    const startValue = value;
-    document.body.classList.add("is-resizing-editor");
-    function move(pointerEvent: PointerEvent) {
-      const position = orientation === "vertical" ? pointerEvent.clientX : pointerEvent.clientY;
-      onChange(clamp(startValue + position - startPosition, min, max));
-    }
-    function finish() {
-      document.body.classList.remove("is-resizing-editor");
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", finish);
-      window.removeEventListener("pointercancel", finish);
-    }
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", finish, { once: true });
-    window.addEventListener("pointercancel", finish, { once: true });
-  }
-
-  function nudge(event: React.KeyboardEvent<HTMLDivElement>) {
-    const lower = orientation === "vertical" ? "ArrowLeft" : "ArrowUp";
-    const higher = orientation === "vertical" ? "ArrowRight" : "ArrowDown";
-    if (event.key !== lower && event.key !== higher && event.key !== "Home" && event.key !== "End") return;
-    event.preventDefault();
-    if (event.key === "Home") onChange(min);
-    else if (event.key === "End") onChange(max);
-    else onChange(clamp(value + (event.key === higher ? 10 : -10), min, max));
-  }
-
-  return <div
-    className={`editor-resize-handle ${className}`}
-    role="separator"
-    tabIndex={0}
-    aria-label={label}
-    aria-orientation={orientation}
-    aria-valuemin={min}
-    aria-valuemax={max}
-    aria-valuenow={value}
-    onPointerDown={startResize}
-    onKeyDown={nudge}
-    onDoubleClick={() => onChange(resetValue)}
-    title="Drag to resize · Double-click to reset"
-  ><span aria-hidden="true" /></div>;
 }
 
 /**

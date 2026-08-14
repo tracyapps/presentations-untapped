@@ -24,6 +24,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MediaLibraryPanel from "@/components/MediaLibraryPanel";
+import ResizeHandle from "@/components/ResizeHandle";
 import BlockPreview from "./BlockPreview";
 import StatusPill from "./StatusPill";
 import { LibraryPickerShell } from "./LibraryShell";
@@ -48,6 +49,23 @@ const TABS: Array<{ id: PickerTab; label: string; ready: boolean }> = [
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short", day: "numeric", year: "numeric", timeZone: "America/Chicago",
 });
+
+/**
+ * The finding column is the *narrow* one.
+ *
+ * The whole reason for a preview pane is to see the thing at a size where you
+ * can actually tell whether it is the right one — a preview squeezed into the
+ * smaller half is just a bigger thumbnail. So results get enough width to scan
+ * and the preview gets the rest.
+ *
+ * "The rest" is not ours to decide though: how much preview you need depends on
+ * the screen you are on, not on the design. Hence the divider, remembered per
+ * person. Wide enough that the results grid keeps at least two columns; narrow
+ * enough that the preview always has room to be a preview.
+ */
+const RESULTS_WIDTH_KEY = "lu-picker-results-width-v1";
+const RESULTS_WIDTH_LIMITS = [260, 720] as const;
+const DEFAULT_RESULTS_WIDTH = 380;
 
 function readableSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -86,6 +104,7 @@ export default function LibraryPickerModal({
 }: LibraryPickerModalProps) {
   const [blockId, setBlockId] = useState<string | null>(initialBlockId ?? null);
   const [assetUrl, setAssetUrl] = useState<string | null>(initialAssetUrl ?? null);
+  const [resultsWidth, setResultsWidth] = useState(DEFAULT_RESULTS_WIDTH);
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const tabRefs = useRef(new Map<PickerTab, HTMLButtonElement | null>());
@@ -99,6 +118,20 @@ export default function LibraryPickerModal({
     setAssetUrl(initialAssetUrl ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    try {
+      const stored = Number(window.localStorage.getItem(RESULTS_WIDTH_KEY));
+      if (Number.isFinite(stored) && stored > 0) {
+        setResultsWidth(Math.min(RESULTS_WIDTH_LIMITS[1], Math.max(RESULTS_WIDTH_LIMITS[0], stored)));
+      }
+    } catch { /* private mode — the default is a fine outcome */ }
+  }, []);
+
+  const changeResultsWidth = useCallback((width: number) => {
+    setResultsWidth(width);
+    try { window.localStorage.setItem(RESULTS_WIDTH_KEY, String(width)); } catch { /* see above */ }
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -181,7 +214,10 @@ export default function LibraryPickerModal({
           <button ref={closeRef} type="button" className="picker-modal-close" aria-label="Close library" onClick={onClose}>×</button>
         </header>
 
-        <div className="picker-modal-body">
+        <div
+          className="picker-modal-body"
+          style={{ "--picker-results-width": `${resultsWidth}px` } as React.CSSProperties}
+        >
           <div
             className="picker-modal-results"
             role="tabpanel"
@@ -260,6 +296,17 @@ export default function LibraryPickerModal({
               </div>
             )}
           </div>
+
+          <ResizeHandle
+            orientation="vertical"
+            className="picker-resize-handle"
+            label="Resize the results column"
+            value={resultsWidth}
+            min={RESULTS_WIDTH_LIMITS[0]}
+            max={RESULTS_WIDTH_LIMITS[1]}
+            resetValue={DEFAULT_RESULTS_WIDTH}
+            onChange={changeResultsWidth}
+          />
 
           <aside className="picker-modal-preview" aria-label="Preview">
             {tab === "blocks" && (selectedBlock ? (
