@@ -23,13 +23,12 @@ export type SlideCanvasEditor = {
   onAssignMedia: (id: string, asset: MediaAsset) => void;
   onAddFloatingMedia: (asset: MediaAsset, position: { x: number; y: number }) => void;
   onTransformImage: (id: string, update: Partial<Extract<ContentNode, { type: "image" }>["props"]>) => void;
-  onText: (id: string, text: string) => void;
   /**
-   * Writes any content prop on any block. `onText` predates this and stays for
-   * the five plain text types; everything else — stat values, list items,
-   * process steps, table cells, pricing tiers, chart data — goes through here,
-   * which is what makes every block fully editable on the canvas rather than
-   * only through Outline's delimiter-separated textareas.
+   * Writes any content prop on any block — stat values, list items, process
+   * steps, table cells, pricing tiers, chart data, and (via InlineText's
+   * `onChangeMarks`) the five rich-text blocks' full run array, marks
+   * included. This is what makes every block fully editable on the canvas
+   * rather than only through Outline's delimiter-separated textareas.
    */
   onUpdateProps: (id: string, props: Record<string, unknown>) => void;
   /** Per-block spacing, alignment, width, and background (BlockSettings). */
@@ -491,19 +490,18 @@ function floatingImageStyle(node: Extract<ContentNode, { type: "image" }>): Reac
  * is emitted at all, so published output is byte-identical to before.
  */
 function RenderContent({ node, editor }: { node: ContentNode; editor?: SlideCanvasEditor }) {
-  const onText = editor?.onText;
   /** Typed prop writer scoped to this node. */
   const set = (props: Record<string, unknown>) => editor?.onUpdateProps(node.id, props);
 
   switch (node.type) {
-    case "title": return <h2 className="slide-title">{onText ? <InlineText value={node.props.text} label="Title" onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</h2>;
-    case "tagline": return <p className="slide-tagline">{onText ? <InlineText value={node.props.text} label="Tagline" onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</p>;
-    case "paragraph": return <p className="slide-paragraph">{onText ? <InlineText value={node.props.text} label="Paragraph" placeholder="Add supporting copy" multiline onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</p>;
+    case "title": return <h2 className="slide-title">{editor ? <InlineText value={node.props.text} label="Title" onChangeMarks={(text) => set({ ...node.props, text })} /> : <Rich value={node.props.text} />}</h2>;
+    case "tagline": return <p className="slide-tagline">{editor ? <InlineText value={node.props.text} label="Tagline" onChangeMarks={(text) => set({ ...node.props, text })} /> : <Rich value={node.props.text} />}</p>;
+    case "paragraph": return <p className="slide-paragraph">{editor ? <InlineText value={node.props.text} label="Paragraph" placeholder="Add supporting copy" multiline onChangeMarks={(text) => set({ ...node.props, text })} /> : <Rich value={node.props.text} />}</p>;
 
     case "blockquote": {
       const props = node.props;
       return <blockquote>
-        {onText ? <InlineText value={props.text} label="Quote" multiline onChange={(text) => onText(node.id, text)} /> : <Rich value={props.text} />}
+        {editor ? <InlineText value={props.text} label="Quote" multiline onChangeMarks={(text) => set({ ...props, text })} /> : <Rich value={props.text} />}
         {/* Attribution was previously only reachable from Outline. */}
         {editor
           ? <cite><InlineString value={props.attribution ?? ""} label="Quote attribution" placeholder="Who said it" onChange={(attribution) => set({ ...props, attribution })} /></cite>
@@ -511,7 +509,7 @@ function RenderContent({ node, editor }: { node: ContentNode; editor?: SlideCanv
       </blockquote>;
     }
 
-    case "callout": return <aside className={`slide-callout callout-${node.props.variant}`}>{onText ? <InlineText value={node.props.text} label="Callout" multiline onChange={(text) => onText(node.id, text)} /> : <Rich value={node.props.text} />}</aside>;
+    case "callout": return <aside className={`slide-callout callout-${node.props.variant}`}>{editor ? <InlineText value={node.props.text} label="Callout" multiline onChangeMarks={(text) => set({ ...node.props, text })} /> : <Rich value={node.props.text} />}</aside>;
 
     case "image": {
       const props = node.props;

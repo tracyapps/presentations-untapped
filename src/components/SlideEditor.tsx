@@ -849,7 +849,6 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, mediaLib
             onAssignMedia: assignMediaToImage,
             onAddFloatingMedia: addFloatingImageFromMedia,
             onTransformImage: transformImage,
-            onText: updateText,
             onUpdateProps: (id, props) => updateNode(id, (current) => (
               { ...current, props: props as typeof current.props } as ContentNode
             )),
@@ -1002,6 +1001,18 @@ function SlideNavigator({ deckId, slides, currentSlideId, theme, view, onViewCha
   const [pillMenuOpen, setPillMenuOpen] = useState(false);
   const pillToggleRef = useRef<HTMLButtonElement>(null);
   const [pillMenuPosition, setPillMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const listRef = useRef<HTMLOListElement>(null);
+
+  // Every slide click is a real navigation — a new route, a new `key` on
+  // SlideEditor (see the edit page), a full remount of this component. That
+  // remount resets the list's scroll position to 0, which reads as "jumping
+  // back to the first slide" even though the click worked. Scrolling the
+  // active tile into view right after mount (before paint, so there is no
+  // visible flash of slide 1) keeps the strip where the person left it.
+  useLayoutEffect(() => {
+    listRef.current?.querySelector('[aria-current="page"]')?.closest("li")
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, []);
 
   // The list this pill lives in scrolls horizontally (overflow-x: auto, which
   // implies overflow-y: auto too), so a plain absolutely-positioned dropdown
@@ -1032,7 +1043,7 @@ function SlideNavigator({ deckId, slides, currentSlideId, theme, view, onViewCha
       <span>{slides.length}</span>
       <PanelViewToggle label="Slide navigator view" value={view} options={[{ value: "large", label: "Large thumbnails", icon: "▣" }, { value: "compact", label: "Compact slides", icon: "▤" }, { value: "pages", label: "Slide numbers", icon: "•••" }]} onChange={onViewChange} />
     </div>
-    <ol className="slide-navigator-list">
+    <ol className="slide-navigator-list" ref={listRef}>
       {slides.map((slide) => {
         const layout = LAYOUTS.find((item) => item.key === slide.layoutKey);
         const isCurrent = slide.id === currentSlideId;

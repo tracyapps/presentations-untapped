@@ -153,14 +153,6 @@ export default function BlockEditModal({
     onMove: (target, direction) => mutate(moveNode(doc, target.id, direction)),
     onDrop: (sourceId, target) => mutate(moveNodeTo(doc, sourceId, target.parentId, target.index)),
     onSwapColumns: (target) => mutate(swapLayoutChildren(doc, target.id)),
-    onText: (id, text) => mutate({
-      ...doc,
-      blocks: replaceNode(doc.blocks, id, (current) => (
-        "text" in current.props
-          ? { ...current, props: { ...current.props, text: [{ text }] } } as ContentNode
-          : current
-      )),
-    }),
     onUpdateProps: (id, props) => mutate({
       ...doc,
       blocks: replaceNode(doc.blocks, id, (current) => (

@@ -1073,6 +1073,14 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
    is how optional captions and details become invisible and unfillable. */
 .direct-text-editor[data-empty]::before { content: attr(data-placeholder); color: var(--text-secondary); font-style: italic; opacity: 0.65; }
 .direct-text-editor[data-empty]:focus::before { content: ""; }
+/* Bold/Italic/Size toolbar that appears above a text selection inside a
+   .direct-text-editor — same fixed-position-portal pattern as .icon-tooltip
+   and .slide-pill-menu (see Editable.tsx's TextFormatToolbar). */
+.rich-text-toolbar { position: fixed; z-index: 1000; display: flex; align-items: center; gap: 2px; padding: 3px; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.rich-text-toolbar button { display: grid; min-width: 26px; min-height: 26px; place-items: center; padding: 0 6px; background: transparent; color: var(--text-primary); border: 0; border-radius: var(--radius-sm); font: var(--text-caption); font-weight: 750; cursor: pointer; }
+.rich-text-toolbar button:hover { background: var(--bg-surface-raised); }
+.rich-text-toolbar button[aria-pressed="true"] { background: var(--accent-primary); color: var(--text-on-accent); }
+.rich-text-toolbar-divider { width: 1px; height: 18px; margin: 0 2px; background: var(--border-default); }
 .direct-number-editor { width: 5.5ch; padding: 2px var(--space-1); background: transparent; color: inherit; border: 1px solid var(--border-default); border-radius: 3px; font: inherit; font-variant-numeric: tabular-nums; text-align: right; }
 .direct-number-editor:focus { border-color: var(--accent-primary); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 34%, transparent); }
 
