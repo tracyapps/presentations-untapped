@@ -1761,7 +1761,7 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
    the spec implies. So: the container is one column wide, both panels are one
    column wide, and each slides itself. Every percentage below resolves against
    a panel's own width, which is the container's width. Nothing to get wrong. */
-.drilldown { overflow: hidden; }
+.drilldown { /*overflow: hidden; nope. stop it claude. this needs to scroll. */ }
 .drilldown-track { position: relative; }
 .drilldown-panel { min-width: 0; width: 100%; display: grid; align-content: start; gap: var(--space-2); transition: transform var(--duration-fast) var(--ease-out); }
 /* The level you are on is in flow and sets the height, so a short category does
