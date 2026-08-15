@@ -425,7 +425,15 @@ button, select { cursor: pointer; }
 .palette-section h2 button small { min-width: 20px; padding: 2px 6px; background: var(--bg-surface-raised); color: var(--text-secondary); border-radius: var(--radius-pill); font: var(--text-caption); letter-spacing: 0; text-align: center; }
 .palette-section h2 button i { font-size: 1rem; font-style: normal; transition: transform var(--duration-fast) var(--ease-out); }
 .palette-section.is-collapsed h2 button i { transform: rotate(-90deg); }
-.palette-section-content { display: grid; gap: var(--space-3); padding: var(--space-2) 0 var(--space-4); }
+/* `align-content: start` is load-bearing, not tidying. A grid's rows stretch to
+   fill the container by default, and once this box has a max-height that
+   stretch becomes a *cap*: the row — and so the child — gets squeezed to the
+   container's height instead of overflowing it. A child that then clips its own
+   overflow (the drill-down rail does, to hide the level sliding off) swallows
+   the rest of the list silently, and the parent never scrolls because as far as
+   it is concerned everything fits. Content-sized rows overflow honestly, which
+   is what gives us a scrollbar. */
+.palette-section-content { display: grid; align-content: start; gap: var(--space-3); padding: var(--space-2) 0 var(--space-4); }
 
 /* A resizable section scrolls inside a box you control instead of growing until
    it pushes the next section off the rail. The height you drag to is a request:
@@ -1813,82 +1821,55 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 /* ---------------------------------------------------------------------------
    Scrollbars
    ---------------------------------------------------------------------------
+   Styled globally rather than per-panel. The first attempt named each scroll
+   region individually and immediately proved the problem with that: the slide
+   navigator was not on the list, so it kept its system scrollbar next to styled
+   ones — and every scroll region added from here on would have had the same
+   bug, silently. A scrollbar is chrome, not a component; it should look the
+   same everywhere without anyone having to remember to opt in.
+
    The default here was macOS overlay scrollbars: invisible until you are
-   already scrolling. That is fine for a document you know is long and useless
-   for a panel where the actual question is "is there more below this?" — you
-   cannot discover a scroll region by looking at it. Styling them makes the
-   browser draw classic, always-present bars, so the answer is visible.
+   already scrolling. Fine for a document you know is long, useless for a panel
+   where the actual question is "is there more below this?" — you cannot
+   discover a scroll region by looking at it. Styling them makes the browser
+   draw classic, always-present bars, so the answer is visible.
 
    Two syntaxes, deliberately both: `scrollbar-width`/`scrollbar-color` is the
    standard one (Firefox, and Chrome 121+), `::-webkit-scrollbar` is what Safari
    understands and gives finer control. Neither alone covers everyone.
-
-   `scrollbar-gutter: stable` reserves the space up front so content does not
-   shift sideways the moment a list grows past the fold.
 */
-.scroll-region,
-.palette-section-content,
-.resource-palette, .block-palette,
-.picker-modal-results, .picker-modal-preview,
-.media-modal-details, .media-modal-library,
-.editor-workspace, .lib-results {
+* {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-  scrollbar-gutter: stable;
 }
 
-.scroll-region::-webkit-scrollbar,
-.palette-section-content::-webkit-scrollbar,
-.resource-palette::-webkit-scrollbar, .block-palette::-webkit-scrollbar,
-.picker-modal-results::-webkit-scrollbar, .picker-modal-preview::-webkit-scrollbar,
-.media-modal-details::-webkit-scrollbar, .media-modal-library::-webkit-scrollbar,
-.editor-workspace::-webkit-scrollbar, .lib-results::-webkit-scrollbar {
-  width: var(--scrollbar-size);
-  height: var(--scrollbar-size);
-}
+*::-webkit-scrollbar { width: var(--scrollbar-size); height: var(--scrollbar-size); }
+*::-webkit-scrollbar-track { background: var(--scrollbar-track); }
 
-.scroll-region::-webkit-scrollbar-track,
-.palette-section-content::-webkit-scrollbar-track,
-.resource-palette::-webkit-scrollbar-track, .block-palette::-webkit-scrollbar-track,
-.picker-modal-results::-webkit-scrollbar-track, .picker-modal-preview::-webkit-scrollbar-track,
-.media-modal-details::-webkit-scrollbar-track, .media-modal-library::-webkit-scrollbar-track,
-.editor-workspace::-webkit-scrollbar-track, .lib-results::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-}
-
-/* The inset border trick: the thumb keeps a little breathing room from the
-   edge without shrinking the hit area, because the padding is part of the
-   thumb and still catches the pointer. */
-.scroll-region::-webkit-scrollbar-thumb,
-.palette-section-content::-webkit-scrollbar-thumb,
-.resource-palette::-webkit-scrollbar-thumb, .block-palette::-webkit-scrollbar-thumb,
-.picker-modal-results::-webkit-scrollbar-thumb, .picker-modal-preview::-webkit-scrollbar-thumb,
-.media-modal-details::-webkit-scrollbar-thumb, .media-modal-library::-webkit-scrollbar-thumb,
-.editor-workspace::-webkit-scrollbar-thumb, .lib-results::-webkit-scrollbar-thumb {
+/* The inset border trick: the thumb looks like it has breathing room from the
+   edge, but the padding is part of the thumb and still catches the pointer, so
+   the grab target stays the full width. */
+*::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   background-clip: content-box;
   border: 3px solid transparent;
   border-radius: var(--radius-pill);
 }
-
-.scroll-region::-webkit-scrollbar-thumb:hover,
-.palette-section-content::-webkit-scrollbar-thumb:hover,
-.resource-palette::-webkit-scrollbar-thumb:hover, .block-palette::-webkit-scrollbar-thumb:hover,
-.picker-modal-results::-webkit-scrollbar-thumb:hover, .picker-modal-preview::-webkit-scrollbar-thumb:hover,
-.media-modal-details::-webkit-scrollbar-thumb:hover, .media-modal-library::-webkit-scrollbar-thumb:hover,
-.editor-workspace::-webkit-scrollbar-thumb:hover, .lib-results::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
-  background-clip: content-box;
-}
+*::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); background-clip: content-box; }
 
 /* The square where a vertical and a horizontal bar meet. Left unstyled it
    renders as a pale system-colored block that reads as a rendering glitch in
    dark mode. */
-.scroll-region::-webkit-scrollbar-corner,
-.palette-section-content::-webkit-scrollbar-corner,
-.resource-palette::-webkit-scrollbar-corner, .block-palette::-webkit-scrollbar-corner,
-.picker-modal-results::-webkit-scrollbar-corner, .picker-modal-preview::-webkit-scrollbar-corner,
-.media-modal-details::-webkit-scrollbar-corner, .media-modal-library::-webkit-scrollbar-corner,
-.editor-workspace::-webkit-scrollbar-corner, .lib-results::-webkit-scrollbar-corner {
-  background: transparent;
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* Reserving the gutter is a per-region decision, not a global one — on a box
+   that only sometimes overflows it stops the content jumping sideways the
+   moment a list grows past the fold, but everywhere else it would just be
+   wasted space. */
+.scroll-region,
+.palette-section-content,
+.resource-palette, .block-palette,
+.picker-modal-results, .picker-modal-preview,
+.media-modal-details, .media-modal-library {
+  scrollbar-gutter: stable;
 }
