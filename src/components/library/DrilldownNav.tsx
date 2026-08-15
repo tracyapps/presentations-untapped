@@ -26,8 +26,43 @@ export type DrilldownGroup<T> = {
   /** Shown under the label at the group level — say why the group exists when
    *  the name alone does not ("No category yet"). */
   hint?: string;
+  /** Leading icon. Defaults to a folder. */
+  icon?: GroupIconKind;
   items: T[];
 };
+
+type GroupIconKind = "folder" | "star" | "unfiled";
+
+/**
+ * A group is a place, not an action.
+ *
+ * Without a mark of its own, a row of text with a chevron reads as "do a thing"
+ * — and stepping into a category is not doing a thing, it is going somewhere.
+ * The folder says that before the label is read. Dashed for the group that
+ * exists only because nobody has filed those blocks yet, which matches how a
+ * draft status pill is drawn elsewhere in the app.
+ *
+ * Drawn rather than typed: the glyph vocabulary here (▦ ☰ ▤ ◫ ★ ✓ ◐ ◌) is
+ * spoken for, and reusing one of those would say something it does not mean.
+ */
+function GroupIcon({ kind }: { kind: GroupIconKind }) {
+  if (kind === "star") {
+    return (
+      <svg className="drilldown-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+        <path d="M8 1.6l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.4 4.2 13.4l.7-4.3-3.1-3 4.3-.6z" fill="currentColor" />
+      </svg>
+    );
+  }
+  return (
+    <svg className="drilldown-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+      <path
+        d="M1.5 4.2c0-.6.5-1.1 1.1-1.1h3l1.5 1.7h6.3c.6 0 1.1.5 1.1 1.1v6.3c0 .6-.5 1.1-1.1 1.1H2.6c-.6 0-1.1-.5-1.1-1.1z"
+        fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"
+        strokeDasharray={kind === "unfiled" ? "2.5 2" : undefined}
+      />
+    </svg>
+  );
+}
 
 export default function DrilldownNav<T extends { id: string }>({
   groups, renderItem, emptyLabel, level, onLevelChange, itemsLabel = "items",
@@ -80,6 +115,7 @@ export default function DrilldownNav<T extends { id: string }>({
             {groups.map((group) => (
               <li key={group.id}>
                 <button type="button" onClick={() => onLevelChange(group.id)} disabled={!group.items.length}>
+                  <GroupIcon kind={group.icon ?? "folder"} />
                   <span className="drilldown-group-label">
                     <strong>{group.label}</strong>
                     {group.hint && <small>{group.hint}</small>}

@@ -247,11 +247,11 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, libraryC
     const favorites = availableLibraryItems.filter((item) => item.favorited);
 
     return [
-      ...(favorites.length ? [{ id: "favorites", label: "Favorites", hint: "Starred in the library", items: favorites }] : []),
+      ...(favorites.length ? [{ id: "favorites", label: "Favorites", hint: "Starred in the library", icon: "star" as const, items: favorites }] : []),
       ...[...byCategory.entries()]
-        .map(([id, bucket]) => ({ id, label: bucket.label, items: bucket.items }))
+        .map(([id, bucket]) => ({ id, label: bucket.label, icon: "folder" as const, items: bucket.items }))
         .sort((a, b) => a.label.localeCompare(b.label)),
-      ...(uncategorized.length ? [{ id: "uncategorized", label: "Uncategorized", hint: "No category yet", items: uncategorized }] : []),
+      ...(uncategorized.length ? [{ id: "uncategorized", label: "Uncategorized", hint: "No category yet", icon: "unfiled" as const, items: uncategorized }] : []),
     ];
   }, [availableLibraryItems]);
 

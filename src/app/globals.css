@@ -1722,7 +1722,11 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
    on screen.
 */
 .drilldown { overflow: hidden; }
-.drilldown-track { position: relative; display: grid; grid-template-columns: 100% 100%; align-items: start; width: 200%; transition: transform var(--duration-fast) var(--ease-out); }
+/* 50%, not 100%: track percentages resolve against the *track*, which is itself
+   200% wide — so `100%` made each panel twice the column width and pushed the
+   count and chevron out under the clip. Each panel is half the track, which is
+   one column. */
+.drilldown-track { position: relative; display: grid; grid-template-columns: 50% 50%; align-items: start; width: 200%; transition: transform var(--duration-fast) var(--ease-out); }
 .drilldown[data-level="items"] .drilldown-track { transform: translateX(-50%); }
 /* No slide on first paint — reopening the section should not re-announce
    itself with an animation. */
@@ -1736,20 +1740,28 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .drilldown-panel:first-child[inert] { left: 0; }
 .drilldown-panel:last-child[inert] { left: 50%; }
 
-.drilldown-groups, .drilldown-items { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-.drilldown-groups > li > button { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: 40px; padding: var(--space-2) var(--space-3); background: var(--bg-page); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); text-align: left; }
+.drilldown-groups, .drilldown-items { display: grid; gap: var(--space-1); min-width: 0; margin: 0; padding: 0; list-style: none; }
+.drilldown-groups > li, .drilldown-items > li { min-width: 0; }
+/* Only the label may absorb the slack. The icon, the count and the chevron are
+   `flex: none` and the label is `min-width: 0`, so at any column width the row
+   ellipsizes from the middle outwards and nothing is ever pushed past the
+   edge. */
+.drilldown-groups > li > button { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-width: 0; min-height: 40px; padding: var(--space-2); background: var(--bg-page); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); text-align: left; }
 .drilldown-groups > li > button:hover:not(:disabled) { background: var(--bg-surface-raised); border-color: var(--accent-primary); }
 .drilldown-groups > li > button:disabled { opacity: 0.5; }
-.drilldown-group-label { display: grid; gap: 1px; min-width: 0; flex: 1; }
+.drilldown-icon { flex: none; color: var(--accent-primary); }
+.drilldown-group-label { display: grid; gap: 1px; min-width: 0; flex: 1 1 auto; }
 .drilldown-group-label strong { overflow: hidden; font: var(--text-body-sm); font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
-.drilldown-group-label small { color: var(--text-secondary); font: var(--text-caption); }
-.drilldown-count { min-width: 22px; padding: 1px 6px; background: var(--bg-surface-raised); color: var(--text-secondary); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 750; text-align: center; }
-.drilldown-groups > li > button i { color: var(--text-secondary); font-size: 1.1rem; font-style: normal; }
+.drilldown-group-label small { overflow: hidden; color: var(--text-secondary); font: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.drilldown-count { flex: none; min-width: 22px; padding: 1px 6px; background: var(--bg-surface-raised); color: var(--text-secondary); border-radius: var(--radius-pill); font: var(--text-caption); font-weight: 750; text-align: center; }
+.drilldown-groups > li > button i { flex: none; color: var(--text-secondary); font-size: 1.1rem; font-style: normal; }
 
 .drilldown-back { display: inline-flex; align-items: center; gap: var(--space-1); align-self: start; padding: var(--space-1) var(--space-2) var(--space-1) 0; background: transparent; color: var(--accent-primary); border: 0; font: var(--text-caption); font-weight: 800; }
 .drilldown-back i { font-size: 1.1rem; font-style: normal; }
-.drilldown-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin: 0; color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-transform: uppercase; }
-.drilldown-heading span { padding: 1px 6px; background: var(--bg-surface-raised); border-radius: var(--radius-pill); letter-spacing: 0; }
+.drilldown-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; margin: 0; overflow: hidden; color: var(--text-secondary); font: var(--text-caption); font-weight: 800; letter-spacing: var(--tracking-eyebrow); text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.drilldown-heading span { flex: none; padding: 1px 6px; background: var(--bg-surface-raised); border-radius: var(--radius-pill); letter-spacing: 0; }
+.drilldown-back { max-width: 100%; overflow: hidden; }
+.drilldown-back span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drilldown-empty { padding: var(--space-2) 0; color: var(--text-secondary); font: var(--text-caption); line-height: 1.5; }
 
 /* One block in the rail. Preview and Add are separate because they answer
