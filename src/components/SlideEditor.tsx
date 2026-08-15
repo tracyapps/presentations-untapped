@@ -156,6 +156,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, libraryC
   const [voiceoverDirty, setVoiceoverDirty] = useState(false);
   const [isAdding, startAdding] = useTransition();
   const [isSavingLibrary, startSavingLibrary] = useTransition();
+  const editorBodyRef = useRef<HTMLDivElement>(null);
   const docRef = useRef(doc);
   const layoutRef = useRef(layoutKey);
   const savingRef = useRef(false);
@@ -812,6 +813,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, libraryC
       </div>
 
       <div
+        ref={editorBodyRef}
         className="editor-body"
         style={{
           "--editor-resource-width": `${panelLayout.resourceVisible ? panelLayout.resourceWidth : 0}px`,
@@ -876,7 +878,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, libraryC
             <MediaLibraryPanel items={mediaItems} configured={mediaLibrary.configured} loadError={mediaLibrary.error} onUploaded={registerMedia} onSelect={(asset) => openPicker("media", undefined, asset)} />
           </PaletteSectionPanel>
         </aside>}
-        {panelLayout.resourceVisible && <ResizeHandle orientation="vertical" className="resource-resize-handle" label="Resize add slide panel" value={panelLayout.resourceWidth} min={PANEL_LIMITS.resourceWidth[0]} max={PANEL_LIMITS.resourceWidth[1]} resetValue={DEFAULT_PANEL_LAYOUT.resourceWidth} onChange={(resourceWidth) => updatePanelLayout({ resourceWidth })} />}
+        {panelLayout.resourceVisible && <ResizeHandle orientation="vertical" className="resource-resize-handle" label="Resize add slide panel" value={panelLayout.resourceWidth} min={PANEL_LIMITS.resourceWidth[0]} max={PANEL_LIMITS.resourceWidth[1]} resetValue={DEFAULT_PANEL_LAYOUT.resourceWidth} onChange={(resourceWidth) => updatePanelLayout({ resourceWidth })} live={{ getElement: () => editorBodyRef.current, property: "--editor-resource-width" }} />}
 
         {panelLayout.inspectorVisible && <aside className="block-palette" aria-label="Slide controls">
           <div className="panel-rail-header"><strong>Slide</strong></div>
@@ -982,7 +984,7 @@ export default function SlideEditor({ deck, initialSlide, libraryItems, libraryC
             </>
           )}
         </aside>}
-        {panelLayout.inspectorVisible && <ResizeHandle orientation="vertical" className="inspector-resize-handle" label="Resize slide controls panel" value={panelLayout.inspectorWidth} min={PANEL_LIMITS.inspectorWidth[0]} max={PANEL_LIMITS.inspectorWidth[1]} resetValue={DEFAULT_PANEL_LAYOUT.inspectorWidth} onChange={(inspectorWidth) => updatePanelLayout({ inspectorWidth })} />}
+        {panelLayout.inspectorVisible && <ResizeHandle orientation="vertical" className="inspector-resize-handle" label="Resize slide controls panel" value={panelLayout.inspectorWidth} min={PANEL_LIMITS.inspectorWidth[0]} max={PANEL_LIMITS.inspectorWidth[1]} resetValue={DEFAULT_PANEL_LAYOUT.inspectorWidth} onChange={(inspectorWidth) => updatePanelLayout({ inspectorWidth })} live={{ getElement: () => editorBodyRef.current, property: "--editor-inspector-width" }} />}
 
         <SlideNavigator deckId={deck.id} slides={navigationSlides} currentSlideId={initialSlide.id} theme={previewTheme} view={slideNavView} onViewChange={(value) => { setSlideNavView(value); localStorage.setItem(SLIDE_NAV_VIEW_KEY, value); }} onNavigate={confirmNavigate} onDuplicate={duplicateCurrentSlide} onDelete={deleteCurrentSlide} deletingDisabled={isAdding || deck.slides.length === 1} />
 
@@ -1097,10 +1099,12 @@ function PaletteSectionPanel({ id, label, count, open, onToggle, height, onHeigh
   children: React.ReactNode;
 }) {
   const contentId = `palette-section-${id}`;
+  const contentRef = useRef<HTMLDivElement>(null);
   const resizable = open && height !== undefined && Boolean(onHeightChange);
   return <section className={`palette-section${open ? " is-open" : " is-collapsed"}${resizable ? " is-resizable" : ""}`}>
     <h2><button type="button" aria-expanded={open} aria-controls={contentId} onClick={onToggle}><span>{label}{count !== undefined && <small>{count}</small>}</span><i aria-hidden="true">⌄</i></button></h2>
     {open && <div
+      ref={contentRef}
       className="palette-section-content"
       id={contentId}
       style={height !== undefined ? { "--palette-section-height": `${height}px` } as React.CSSProperties : undefined}
@@ -1114,6 +1118,7 @@ function PaletteSectionPanel({ id, label, count, open, onToggle, height, onHeigh
       max={SECTION_HEIGHT_LIMITS[1]}
       resetValue={DEFAULT_SECTION_HEIGHT}
       onChange={onHeightChange!}
+      live={{ getElement: () => contentRef.current, property: "--palette-section-height" }}
     />}
   </section>;
 }

@@ -107,6 +107,7 @@ export default function LibraryPickerModal({
   const [resultsWidth, setResultsWidth] = useState(DEFAULT_RESULTS_WIDTH);
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef(new Map<PickerTab, HTMLButtonElement | null>());
   useFocusTrap(dialogRef, open);
 
@@ -215,6 +216,7 @@ export default function LibraryPickerModal({
         </header>
 
         <div
+          ref={bodyRef}
           className="picker-modal-body"
           style={{ "--picker-results-width": `${resultsWidth}px` } as React.CSSProperties}
         >
@@ -306,6 +308,9 @@ export default function LibraryPickerModal({
             max={RESULTS_WIDTH_LIMITS[1]}
             resetValue={DEFAULT_RESULTS_WIDTH}
             onChange={changeResultsWidth}
+            /* Live, or every pixel of the drag re-renders the shell and every
+               block preview in it. */
+            live={{ getElement: () => bodyRef.current, property: "--picker-results-width" }}
           />
 
           <aside className="picker-modal-preview" aria-label="Preview">

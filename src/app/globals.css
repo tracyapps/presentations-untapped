@@ -1731,14 +1731,23 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 /* No slide on first paint — reopening the section should not re-announce
    itself with an animation. */
 .drilldown:not([data-ready]) .drilldown-track { transition: none; }
-.drilldown-panel { min-width: 0; display: grid; align-content: start; gap: var(--space-2); }
+.drilldown-panel { min-width: 0; display: grid; align-content: start; gap: var(--space-2); grid-row: 1; }
+/* Both panels are pinned to their own column *explicitly*. They have to be:
+   taking the inactive one out of flow (below) leaves the active one as the only
+   grid item, and auto-placement then drops it back into column 1 — where the
+   translated track has already carried it off screen. That is what made the
+   drilled-in level look empty. */
+.drilldown-panel:first-child { grid-column: 1; }
+.drilldown-panel:last-child { grid-column: 2; }
 /* Only the level you are on is in flow, so the rail is as tall as what you can
    actually see — a short category does not leave a column of blank space
    underneath it just because the group list behind is longer. The other level
-   is still painted, so the slide is a slide and not a wipe. */
-.drilldown-panel[inert] { position: absolute; top: 0; width: 50%; }
-.drilldown-panel:first-child[inert] { left: 0; }
-.drilldown-panel:last-child[inert] { left: 50%; }
+   is still painted, so the slide is a slide and not a wipe. An absolutely
+   positioned grid child with a definite column is contained by that grid area,
+   so pinning the top-left and taking full width fills exactly the column it was
+   already assigned. Height stays automatic — stretching it to the grid area
+   would crop the taller list while it slides away. */
+.drilldown-panel[inert] { position: absolute; inset: 0 auto auto 0; width: 100%; }
 
 .drilldown-groups, .drilldown-items { display: grid; gap: var(--space-1); min-width: 0; margin: 0; padding: 0; list-style: none; }
 .drilldown-groups > li, .drilldown-items > li { min-width: 0; }
