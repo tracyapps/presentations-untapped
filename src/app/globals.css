@@ -1721,33 +1721,26 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
    it moves, and the animation can be dropped entirely without changing what is
    on screen.
 */
+/* No double-width track, no percentage that resolves against a box other than
+   the one you are looking at. Two earlier attempts got this wrong in two
+   different ways — `100%` inside a `200%` track meant two columns, and an
+   absolutely positioned grid child was not contained by its grid area the way
+   the spec implies. So: the container is one column wide, both panels are one
+   column wide, and each slides itself. Every percentage below resolves against
+   a panel's own width, which is the container's width. Nothing to get wrong. */
 .drilldown { overflow: hidden; }
-/* 50%, not 100%: track percentages resolve against the *track*, which is itself
-   200% wide — so `100%` made each panel twice the column width and pushed the
-   count and chevron out under the clip. Each panel is half the track, which is
-   one column. */
-.drilldown-track { position: relative; display: grid; grid-template-columns: 50% 50%; align-items: start; width: 200%; transition: transform var(--duration-fast) var(--ease-out); }
-.drilldown[data-level="items"] .drilldown-track { transform: translateX(-50%); }
+.drilldown-track { position: relative; }
+.drilldown-panel { min-width: 0; width: 100%; display: grid; align-content: start; gap: var(--space-2); transition: transform var(--duration-fast) var(--ease-out); }
+/* The level you are on is in flow and sets the height, so a short category does
+   not leave blank space under it just because the group list behind is longer.
+   The other level is taken out of flow but still painted, so the change reads
+   as a slide rather than a wipe. */
+.drilldown-panel[inert] { position: absolute; top: 0; left: 0; }
+.drilldown[data-level="groups"] .drilldown-panel:last-child { transform: translateX(100%); }
+.drilldown[data-level="items"] .drilldown-panel:first-child { transform: translateX(-100%); }
 /* No slide on first paint — reopening the section should not re-announce
    itself with an animation. */
-.drilldown:not([data-ready]) .drilldown-track { transition: none; }
-.drilldown-panel { min-width: 0; display: grid; align-content: start; gap: var(--space-2); grid-row: 1; }
-/* Both panels are pinned to their own column *explicitly*. They have to be:
-   taking the inactive one out of flow (below) leaves the active one as the only
-   grid item, and auto-placement then drops it back into column 1 — where the
-   translated track has already carried it off screen. That is what made the
-   drilled-in level look empty. */
-.drilldown-panel:first-child { grid-column: 1; }
-.drilldown-panel:last-child { grid-column: 2; }
-/* Only the level you are on is in flow, so the rail is as tall as what you can
-   actually see — a short category does not leave a column of blank space
-   underneath it just because the group list behind is longer. The other level
-   is still painted, so the slide is a slide and not a wipe. An absolutely
-   positioned grid child with a definite column is contained by that grid area,
-   so pinning the top-left and taking full width fills exactly the column it was
-   already assigned. Height stays automatic — stretching it to the grid area
-   would crop the taller list while it slides away. */
-.drilldown-panel[inert] { position: absolute; inset: 0 auto auto 0; width: 100%; }
+.drilldown:not([data-ready]) .drilldown-panel { transition: none; }
 
 .drilldown-groups, .drilldown-items { display: grid; gap: var(--space-1); min-width: 0; margin: 0; padding: 0; list-style: none; }
 .drilldown-groups > li, .drilldown-items > li { min-width: 0; }
@@ -1789,5 +1782,5 @@ button.lib-split-item[data-disabled] { cursor: not-allowed; opacity: 0.55; }
 .library-row-actions button.is-primary { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
 
 @media (prefers-reduced-motion: reduce) {
-  .drilldown-track { transition: none; }
+  .drilldown-panel { transition: none; }
 }

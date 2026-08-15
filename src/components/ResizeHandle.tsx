@@ -55,6 +55,7 @@ export default function ResizeHandle({ orientation, className, label, value, min
     const startValue = value;
     const element = live?.getElement() ?? null;
     let latest = startValue;
+    let frame = 0;
 
     // Capture on the handle, so the drag keeps tracking even when the pointer
     // runs off the divider — or off the window — mid-gesture.
@@ -64,10 +65,19 @@ export default function ResizeHandle({ orientation, className, label, value, min
     function move(pointerEvent: PointerEvent) {
       const position = orientation === "vertical" ? pointerEvent.clientX : pointerEvent.clientY;
       latest = clamp(startValue + position - startPosition, min, max);
-      if (element && live) element.style.setProperty(live.property, `${latest}px`);
-      else onChange(latest);
+      if (!element || !live) { onChange(latest); return; }
+      // A gaming mouse fires pointermove far faster than the screen refreshes,
+      // and each write here invalidates layout for a whole panel. Coalescing to
+      // one write per frame throws away work nobody could have seen.
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        element.style.setProperty(live.property, `${latest}px`);
+      });
     }
     function finish() {
+      if (frame) cancelAnimationFrame(frame);
+      if (element && live) element.style.setProperty(live.property, `${latest}px`);
       document.body.classList.remove("is-resizing-editor");
       // Throws if the capture was already lost (element unmounted, pointer
       // cancelled). Nothing to do about it, and nothing worth breaking for.
